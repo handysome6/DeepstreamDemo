@@ -1,0 +1,24 @@
+build/
+build-*/
+*.o
+*.so
+*.so.*
+*.a
+.cache/
+compile_commands.json
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Generated TensorRT engines / model artifacts
+*.engine
+*.trt
+*.onnx
+*.wts
+
+# Local config overrides
+*.local.ini
+*.local.yml
