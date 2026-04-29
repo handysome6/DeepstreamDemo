@@ -19,15 +19,15 @@ URL="${1:-rtsp://127.0.0.1:8554/test}"
 CODEC="${2:-h264}"   # h264 or h265
 
 case "$CODEC" in
-    h264) DEPAY=rtph264depay; PARSE=h264parse; DEC=nvh264dec ;;
-    h265) DEPAY=rtph265depay; PARSE=h265parse; DEC=nvh265dec ;;
+    h264) DEPAY=rtph264depay; PARSE=h264parse; DEC=nvv4l2decoder ;;
+    h265) DEPAY=rtph265depay; PARSE=h265parse; DEC=nvv4l2decoder ;;
     *) echo "Unknown codec: $CODEC (use h264 or h265)" >&2; exit 2 ;;
 esac
 
 export QT_XCB_GL_INTEGRATION=xcb_glx
 # export GST_DEBUG=3
 
-PIPELINE="rtspsrc location=$URL latency=0 drop-on-latency=true ! "
+PIPELINE="rtspsrc location=$URL protocols=tcp latency=0 drop-on-latency=true ! "
 PIPELINE+="$DEPAY ! $PARSE ! $DEC ! "
 PIPELINE+='nvvideoconvert ! '
 PIPELINE+='video/x-raw(memory:NVMM),format=RGBA ! '

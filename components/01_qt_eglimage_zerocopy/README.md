@@ -23,7 +23,7 @@ doesn't, the whole project needs a different display strategy.
 ## Architecture
 
 ```text
-videotestsrc (or rtspsrc + nvh264dec)
+videotestsrc (or rtspsrc + nvv4l2decoder)
     │
     ▼
 nvvideoconvert
@@ -162,6 +162,12 @@ Fill in once verified.
   compose path. If a future platform forces EGL, the first fallback should be
   `QOpenGLWindow` via `createWindowContainer`, not forcing `xcb_egl` back into
   the current widget design.
+- **RTSP decoder naming matters on this stack.** `nvh264dec` is not a valid
+  element in the tested DeepStream container, so RTSP failure under that name is
+  not evidence of a bad display path. The container actually provides
+  `nvv4l2decoder`, and that decoder is the one that matches the downstream
+  `nvvideoconvert -> video/x-raw(memory:NVMM) -> NvBufSurface` contract used by
+  this component.
 - **Driver version.** Tested target is desktop NVIDIA 580.126.09. Driver must
   support both NvBufSurface EGLImage export and desktop
   `GL_OES_EGL_image_external`. If the window presents but the texture itself is

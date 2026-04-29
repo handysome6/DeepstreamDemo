@@ -37,8 +37,8 @@ case "${1:-videotestsrc}" in
     smpte) PIPELINE="$SMPTE_PIPELINE" ;;
     rtsp)
         URL="${RTSP_URL:?set RTSP_URL=rtsp://...}"
-        PIPELINE="rtspsrc location=$URL latency=0 drop-on-latency=true ! "
-        PIPELINE+="rtph264depay ! h264parse ! nvh264dec ! "
+        PIPELINE="rtspsrc location=$URL protocols=tcp latency=0 drop-on-latency=true ! "
+        PIPELINE+="rtph264depay ! h264parse ! nvv4l2decoder ! "
         PIPELINE+='nvvideoconvert ! '
         PIPELINE+='video/x-raw(memory:NVMM),format=RGBA ! '
         PIPELINE+='appsink name=sink'

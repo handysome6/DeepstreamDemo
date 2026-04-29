@@ -184,6 +184,13 @@ though it is no longer “strict zero-copy”.
    - replace the old 5-point probe with a coarse grid `nonBlack / bright`
      statistic so sparse-content frames no longer look falsely black
 2. Re-test RTSP on the new path
+   - Result on the local RTSP lab: the path works once the pipeline uses the
+     decoder family actually present in the tested DeepStream container.
+   - `nvh264dec` failed not because its decode capability was insufficient, but
+     because it was not an available plugin in this environment.
+   - `nvv4l2decoder` succeeded because it is the decoder the container really
+     provides, and it matches the downstream `NVMM / NvBufSurface` contract that
+     this component consumes.
 3. Update the component README to stop promising strict `EGLImage` zero-copy on
    desktop dGPU and instead document the actual GPU-only contract
 4. If future profiling needs a vendor tool artifact, treat `nsys` as supporting
