@@ -24,18 +24,19 @@ DeepstreamDemo/
 │   ├── architecture.md             the sub-project rules
 │   └── component-template.md       what every new component must contain
 └── components/
-    └── 01_qt_eglimage_zerocopy/    P0.1: NVMM → Qt OpenGL zero-copy display
+    ├── 01_qt_eglimage_zerocopy/    P0.1: NVMM → Qt OpenGL GPU-only display
+    └── 02_nvurisrcbin_reconnect/   P0.2: single RTSP source + reconnect
 ```
 
 ## Component Index
 
 | #  | Name                       | Proves                                                   | Status |
 |----|----------------------------|----------------------------------------------------------|--------|
-| 01 | `qt_eglimage_zerocopy`     | NVMM `GstBuffer` → `EGLImage` → Qt `QOpenGLWidget`       | draft  |
+| 01 | `qt_eglimage_zerocopy`     | NVMM `GstBuffer` → CUDA-GL interop → Qt `QOpenGLWidget`  | ready  |
+| 02 | `nvurisrcbin_reconnect`    | Single RTSP source with reliable reconnect over 01       | draft  |
 
 Future components (planned, not implemented):
 
-| 02 | `nvurisrcbin_reconnect`    | Single-source RTSP with reliable reconnect              | tbd |
 | 03 | `latency_probe`            | PTS-to-paint wallclock measurement utility              | tbd |
 | 04 | `selective_yolo_batch`     | Selective batched inference on N of M streams           | tbd |
 | 05 | `cuda_stitch_appsink_loop` | NVMM stitching via appsink → CUDA → appsrc round-trip   | tbd |
