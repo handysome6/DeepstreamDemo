@@ -124,16 +124,44 @@ human observation showed the bouncing ball correctly on screen.
    - a synthetic full-frame pattern such as `videotestsrc pattern=smpte`
      for machine-checkable runs.
 
-2. **`dataPtr` semantics still need validation**
-   The current CUDA→GL upload path assumes `surfaceList[0].dataPtr` is directly
-   usable as the source of `cudaMemcpy2DToArray`. The fact that the window is
-   visibly showing the bouncing ball strongly suggests the path is alive, but we
-   still need profiler-backed confirmation of what the actual device-side copy
-   behavior is.
+2. **`dataPtr` semantics are now validated for the current path**
+   Direct call tracing confirmed that `surfaceList[0].dataPtr` is being consumed
+   as the source of a steady-state `cudaMemcpy2DToArray(..., cudaMemcpyDeviceToDevice)`
+   upload into the GL texture backing storage.
 
-3. **GPU-only proof is not finished**
-   We have not yet run `nsys` on the new path to verify the absence of any
-   `DtoH` / `HtoD` host round-trip.
+3. **GPU-only proof is complete for the tested synthetic path**
+   We first tried to close this with `nsys`, but on this stack the exported
+   report only surfaced CUDA device-query calls and did not reliably expose the
+   steady-state interop / memcpy activity. We therefore used a temporary
+   `LD_PRELOAD` shim to trace the actual CUDA runtime calls made by the process.
+
+## Final verification result
+
+The direct CUDA call trace on the running demo showed this repeated steady-state
+sequence:
+
+```text
+cudaGraphicsMapResources
+cudaGraphicsSubResourceGetMappedArray
+cudaMemcpy2DToArray(kind=DtoD)
+cudaGraphicsUnmapResources
+```
+
+It also showed the expected one-time setup call:
+
+```text
+cudaGraphicsGLRegisterImage
+```
+
+Most importantly:
+
+- repeated `cudaMemcpy2DToArray(kind=DtoD)` was observed during rendering
+- zero `HtoD` copies were observed
+- zero `DtoH` copies were observed
+
+So for the tested `videotestsrc pattern=smpte -> nvvideoconvert -> NVBUF_MEM_CUDA_DEVICE RGBA`
+path, the current widget implementation is confirmed to be **GPU-only** rather
+than host-staged.
 
 ## Why this pivot is acceptable
 
@@ -155,13 +183,11 @@ though it is no longer “strict zero-copy”.
    - add `pattern=smpte` as a separate machine-checkable mode
    - replace the old 5-point probe with a coarse grid `nonBlack / bright`
      statistic so sparse-content frames no longer look falsely black
-2. Run `nsys` against the new path and verify:
-   - no `cuMemcpyDtoH`
-   - no `cuMemcpyHtoD`
-   - GPU-side copy activity is expected and acceptable
-3. Re-test RTSP on the new path
-4. Update the component README to stop promising strict `EGLImage` zero-copy on
+2. Re-test RTSP on the new path
+3. Update the component README to stop promising strict `EGLImage` zero-copy on
    desktop dGPU and instead document the actual GPU-only contract
+4. If future profiling needs a vendor tool artifact, treat `nsys` as supporting
+   evidence only; the decisive proof on this stack was direct CUDA call tracing
 
 ## Lesson
 

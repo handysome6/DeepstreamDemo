@@ -110,9 +110,10 @@ Tick each one on real hardware before moving status to `ready`.
 - [ ] `run_videotestsrc.sh` shows the moving ball pattern, no black frame,
       no stuttering, for at least 5 minutes.
 - [ ] `run_rtsp.sh` shows the live camera feed.
-- [ ] `nsys profile` of the running process shows **zero** `cuMemcpyDtoH` /
-      `cuMemcpyHtoD` in the steady-state frame loop. (One-time setup
-      transfers are fine.)
+- [x] Steady-state CUDA call tracing shows **zero** `HtoD` / `DtoH` host
+      round-trip in the frame loop, while repeatedly observing
+      `cudaMemcpy2DToArray(..., cudaMemcpyDeviceToDevice)` plus CUDA-GL interop
+      calls.
 - [ ] `nvidia-smi dmon` shows GPU memory traffic without sustained PCIe
       readback traffic from device to host.
 - [ ] Resizing the window does not crash and does not leak GPU memory
@@ -130,7 +131,7 @@ Fill in once verified.
 - ingest-to-paint latency p50 / p99: `__ ms` / `__ ms`
 - CPU usage of demo process at 1080p30: `__ %`
 - GPU SM / VRAM: `__ %` / `__ MB`
-- Verified zero-copy via `nsys`: `__` (yes/no, attach trace path)
+- Verified GPU-only via direct CUDA call tracing: `yes` (`cudaGraphicsMapResources` → `cudaGraphicsSubResourceGetMappedArray` → `cudaMemcpy2DToArray(..., cudaMemcpyDeviceToDevice)` → `cudaGraphicsUnmapResources`; no `HtoD` / `DtoH` observed)
 
 ## Known gotchas
 
