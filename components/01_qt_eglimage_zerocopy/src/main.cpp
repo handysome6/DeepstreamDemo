@@ -9,8 +9,9 @@
 namespace {
 
 // Default pipeline: synthetic NVMM source. No camera, no DeepStream pipeline
-// elements, just nvvideoconvert producing an NV12 NVMM buffer for appsink.
-// Lets us isolate the EGLImage/Qt path from any RTSP or decoder issue.
+// elements, just nvvideoconvert producing an RGBA CUDA-device buffer for
+// appsink. Lets us isolate the dGPU GPU-only Qt display path from any RTSP
+// or decoder issue.
 constexpr const char* kDefaultPipeline =
     "videotestsrc is-live=true pattern=ball ! "
     "video/x-raw,width=1920,height=1080,framerate=30/1 ! "
@@ -21,17 +22,17 @@ constexpr const char* kDefaultPipeline =
 }  // namespace
 
 int main(int argc, char* argv[]) {
-    // Force EGL for Qt's GL context. Without this, on X11 Qt would create a
-    // GLX context whose EGLDisplay is not the one NvBufSurface uses, and
-    // glEGLImageTargetTexture2DOES would either not resolve or render black.
+    // On this DS9.0 + NVIDIA 580 + Qt6 stack, QOpenGLWidget composes to a
+    // visible X11 window correctly under xcb_glx but renders a black window
+    // under xcb_egl even when the internal FBO contents are correct.
     //
-    // DIAGNOSTIC: allow ALLOW_GLX=1 to skip this and let Qt pick the default
-    // GLX integration. The diagnostic gradient shader doesn't touch the
-    // texture path so it should render identically; if it does NOT (i.e.
-    // window stays black under EGL but turns colorful under GLX), the bug
-    // is in the EGL <-> QOpenGLWidget composition, not in our GL code.
-    if (qgetenv("ALLOW_GLX") != "1") {
+    // Default to GLX for the dGPU GPU-only display path. Keep ALLOW_EGL=1 as
+    // an escape hatch for diagnostics and for future regression checks against
+    // the known-bad compose path.
+    if (qgetenv("ALLOW_EGL") == "1") {
         qputenv("QT_XCB_GL_INTEGRATION", "xcb_egl");
+    } else {
+        qputenv("QT_XCB_GL_INTEGRATION", "xcb_glx");
     }
 
     gst_init(&argc, &argv);
@@ -40,8 +41,8 @@ int main(int argc, char* argv[]) {
     fmt.setRenderableType(QSurfaceFormat::OpenGL);
     fmt.setMajorVersion(3);
     fmt.setMinorVersion(3);
-    // Compatibility profile is required so the GL_OES_EGL_image_external
-    // extension and samplerExternalOES are usable on desktop NVIDIA GL.
+    // Compatibility profile keeps the Qt/OpenGL setup aligned with the known
+    // good desktop NVIDIA path while we render a regular GL_TEXTURE_2D.
     fmt.setProfile(QSurfaceFormat::CompatibilityProfile);
     // Disable vsync so the latency probe measures the render path itself,
     // not the swap-interval wait.

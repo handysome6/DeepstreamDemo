@@ -87,8 +87,34 @@ GstFlowReturn GstSourcePipeline::onNewSampleCb(GstAppSink* sink, gpointer user_d
         return GST_FLOW_ERROR;
     }
 
-    if (NvBufSurfaceMapEglImage(surf, 0) != 0) {
-        qWarning() << "NvBufSurfaceMapEglImage failed (batch index 0).";
+    const auto& s0 = surf->surfaceList[0];
+    static bool s_loggedSurfaceInfo = false;
+    if (!s_loggedSurfaceInfo) {
+        qInfo().noquote() << QString(
+            "NvBufSurface: numFilled=%1 memType=%2 colorFormat=%3 layout=%4 width=%5 height=%6 pitch=%7 plane0-offset=%8 plane-count=%9 dataPtr=%10")
+            .arg(surf->numFilled)
+            .arg(int(surf->memType))
+            .arg(int(s0.colorFormat))
+            .arg(int(s0.layout))
+            .arg(s0.width)
+            .arg(s0.height)
+            .arg(s0.pitch)
+            .arg(s0.planeParams.offset[0])
+            .arg(s0.planeParams.num_planes)
+            .arg(quintptr(s0.dataPtr), 0, 16);
+        s_loggedSurfaceInfo = true;
+    }
+
+    if (surf->memType != NVBUF_MEM_CUDA_DEVICE ||
+        s0.colorFormat != NVBUF_COLOR_FORMAT_RGBA ||
+        s0.layout != NVBUF_LAYOUT_PITCH ||
+        s0.dataPtr == nullptr) {
+        qWarning().noquote() << QString(
+            "Unsupported dGPU frame contract: memType=%1 colorFormat=%2 layout=%3 dataPtr=%4")
+            .arg(int(surf->memType))
+            .arg(int(s0.colorFormat))
+            .arg(int(s0.layout))
+            .arg(quintptr(s0.dataPtr), 0, 16);
         gst_buffer_unmap(buf, &mapInfo);
         gst_sample_unref(sample);
         return GST_FLOW_ERROR;
@@ -99,7 +125,12 @@ GstFlowReturn GstSourcePipeline::onNewSampleCb(GstAppSink* sink, gpointer user_d
     holder->buffer        = buf;
     holder->mapInfo       = mapInfo;
     holder->surface       = surf;
-    holder->eglImage      = surf->surfaceList[0].mappedAddr.eglImage;
+    holder->width         = s0.width;
+    holder->height        = s0.height;
+    holder->pitch         = s0.pitch;
+    holder->memType       = int(surf->memType);
+    holder->colorFormat   = int(s0.colorFormat);
+    holder->layout        = int(s0.layout);
     holder->pts           = GST_BUFFER_PTS(buf);
     holder->captureWallNs = QDateTime::currentMSecsSinceEpoch() * 1000000LL;
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Runs the prototype against a real RTSP source. This is the bare NVDEC →
-# NVMM → EGLImage path; no DeepStream elements yet. The point is to confirm
-# that the display path works with live, jittery, real-encoder input before
-# we add any DeepStream complexity on top of it.
+# NVMM/CUDA-device → GL texture path; no DeepStream elements yet. The point
+# is to confirm that the dGPU GPU-only display path works with live,
+# jittery, real-encoder input before we add any DeepStream complexity on top.
 
 set -euo pipefail
 
@@ -24,13 +24,13 @@ case "$CODEC" in
     *) echo "Unknown codec: $CODEC (use h264 or h265)" >&2; exit 2 ;;
 esac
 
-export QT_XCB_GL_INTEGRATION=xcb_egl
+export QT_XCB_GL_INTEGRATION=xcb_glx
 # export GST_DEBUG=3
 
 PIPELINE="rtspsrc location=$URL latency=0 drop-on-latency=true ! "
 PIPELINE+="$DEPAY ! $PARSE ! $DEC ! "
 PIPELINE+='nvvideoconvert ! '
-PIPELINE+='video/x-raw(memory:NVMM),format=NV12 ! '
+PIPELINE+='video/x-raw(memory:NVMM),format=RGBA ! '
 PIPELINE+='appsink name=sink'
 
 echo "Pipeline: $PIPELINE"

@@ -1,7 +1,7 @@
 # 001 — `QOpenGLWidget` shows all-black under `xcb_egl` (DeepStream 9.0 container, NVIDIA 580)
 
 > **Component:** `01_qt_eglimage_zerocopy`
-> **Status:** root cause located, fix not yet committed.
+> **Status:** root cause located; workaround committed by defaulting to GLX.
 > **Hard takeaway:** when a Qt window is unexpectedly black, prove which side
 > of the *FBO → window* boundary is wrong **before** touching shaders or
 > textures.
@@ -77,12 +77,12 @@ X window backing store.
 ### Probe 3 — flip `QT_XCB_GL_INTEGRATION` to isolate the offending layer
 
 Same code, same shader, same container, only the platform integration
-changes. We added an `ALLOW_GLX=1` runtime switch in `main.cpp` and
+changes. We added an `ALLOW_EGL=1` runtime switch in `main.cpp` and
 `run_in_container.sh`:
 
 ```bash
-ALLOW_GLX=1 ./scripts/run_in_container.sh    # forces xcb_glx
-./scripts/run_in_container.sh                # default xcb_egl
+./scripts/run_in_container.sh               # default xcb_glx
+ALLOW_EGL=1 ./scripts/run_in_container.sh   # forces xcb_egl
 ```
 
 ### Result table
@@ -128,12 +128,12 @@ and burning the same time again would be a waste.
 
 ## Fix options (ordered by cost)
 
-1. **Drop the EGL force.** Remove the `qputenv("QT_XCB_GL_INTEGRATION",
-   "xcb_egl")` and let Qt pick GLX (or run with `ALLOW_GLX=1`). On NVIDIA
-   + libglvnd, `eglGetProcAddress("glEGLImageTargetTexture2DOES")` and
-   the `EGLImageKHR` returned by `NvBufSurfaceMapEglImage` remain usable
-   from a GLX context — they share libglvnd's EGL display. This is the
-   working assumption for the next iteration of the component.
+1. **Default to GLX.** Keep `QOpenGLWidget`, but set
+   `QT_XCB_GL_INTEGRATION=xcb_glx` by default and reserve `ALLOW_EGL=1`
+   for diagnostics. On NVIDIA + libglvnd, `eglGetProcAddress`
+   (`glEGLImageTargetTexture2DOES`) and the `EGLImageKHR` returned by
+   `NvBufSurfaceMapEglImage` remain usable from a GLX context, so this is
+   the cheapest way to unblock the component.
 2. **Replace `QOpenGLWidget` with `QOpenGLWindow`** embedded via
    `QWidget::createWindowContainer`. This sidesteps QOpenGLWidget's FBO
    compose entirely, so the EGL integration can stay if zero-copy
@@ -141,26 +141,26 @@ and burning the same time again would be a waste.
 3. **File a Qt / NVIDIA reproducer.** Out of scope for the component,
    but worth doing once the demo itself is unblocked.
 
-We will try (1) first. If EGLImage interop turns out to need a true EGL
-context, fall back to (2).
+We implemented (1) as the current default. If EGLImage interop ever turns
+out to need a true EGL context on a future platform, fall back to (2).
 
 ## Diagnostic instrumentation kept in the tree
 
-So the next person can re-run all three probes without rederiving them:
+So the next person can re-run the important probes without rederiving them:
 
-- `src/VideoGLWidget.cpp` — `paintGL` carries the UV-gradient shader, the
-  purple `glClearColor`, and the 5-point `glReadPixels` probe printed once
-  per second alongside the fps line.
-- `src/main.cpp` — honours `ALLOW_GLX=1` to skip forcing `xcb_egl`.
-- `scripts/run_in_container.sh` — passes `QT_XCB_GL_INTEGRATION=xcb_glx`
-  through to the container when `ALLOW_GLX=1`.
+- `src/VideoGLWidget.cpp` — the real `samplerExternalOES` texture shader is
+  back, and the 5-point `glReadPixels` probe still prints once per second
+  alongside the fps line so we can tell whether the internal FBO is alive.
+- `src/main.cpp` — defaults to `xcb_glx` and honours `ALLOW_EGL=1` to switch
+  back to the known-bad `xcb_egl` path for regression checks.
+- `scripts/run_in_container.sh` — mirrors the same default / override logic
+  into the container environment.
 - This document, plus `/tmp/xwd2pgm.py` (regenerate from this file's
   Probe 2 section if it has been deleted).
 
-When the texture path comes back, **leave the FBO probe in place until
-the texture render is verified on-screen** — otherwise we lose the
-ability to tell "shader didn't sample" from "compositor swallowed it"
-again.
+The purpose of keeping the FBO probe is to separate two future failure modes:
+`EGLImage` sampled wrong vs. widget composed wrong. Those are different bugs
+and should stay distinguishable.
 
 ## Lessons
 
@@ -173,5 +173,27 @@ again.
   probe alone would still leave us guessing whether the shader was
   broken.
 - When Qt's platform integration is implicated, leaving a runtime switch
-  (`ALLOW_GLX=1`) in the tree is cheap and pays for itself the next
+  (`ALLOW_EGL=1`) in the tree is cheap and pays for itself the next
   time someone hits a related symptom.
+
+## Current trade-off
+
+We are **defaulting to GLX** today because it is the lowest-cost path that
+both presents correctly on screen and still lets desktop NVIDIA bind the
+`NvBufSurface`-exported `EGLImage` into `GL_TEXTURE_EXTERNAL_OES`.
+
+We are **not defaulting to EGL** today because, in the current container /
+driver / Qt combination, `QOpenGLWidget` under `xcb_egl` loses the FBO during
+Qt's internal compose step and produces a black window even though the FBO is
+correct.
+
+This is a tactical choice, not a statement that GLX is architecturally better:
+
+- **Why GLX now:** it works with the current widget design, unblocks the demo,
+  and matches the immediate project constraint (X11 desktop on NVIDIA).
+- **Why not EGL now:** `QOpenGLWidget` + `xcb_egl` is currently broken here.
+- **Why EGL later might still matter:** Wayland and a cleaner all-EGL display
+  stack will eventually push us back toward EGL.
+- **What changes when that day comes:** do not force `xcb_egl` back into the
+  current `QOpenGLWidget` design; migrate the display surface to
+  `QOpenGLWindow` first, then retest.

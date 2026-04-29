@@ -44,7 +44,7 @@ QOpenGLWidget::onNewFrame(FrameHolder*)
 swap buffers
 ```
 
-**Zero-copy claim:** at no point is the NV12 surface read on the CPU, copied
+**Zero-copy claim:** at no point is the NVMM surface read on the CPU, copied
 to system memory, or re-uploaded to GL. The GL texture is a *view* over the
 same CUDA-resident memory the decoder produced.
 
@@ -75,6 +75,8 @@ with no camera and no DeepStream installed beyond the libs:
 
 ```bash
 ./scripts/run_videotestsrc.sh
+# or, inside the containerized dev setup used in this repo:
+./scripts/run_in_container.sh
 ```
 
 For a real RTSP camera (still no DeepStream pipeline yet — this is the bare
@@ -85,11 +87,14 @@ NVMM path):
 ```
 
 You should see a window with the test pattern (or live video) animating
-smoothly, and a periodic stdout line:
+smoothly, and a periodic stdout line similar to:
 
 ```
-fps=30 ingest-to-paint-latency=12ms
+fps=30  ingest-to-paint avg=0.3 ms  max=1 ms | FBO probe: ...
 ```
+
+For diagnostics, `ALLOW_EGL=1 ./scripts/run_in_container.sh` forces the old
+`xcb_egl` path that is currently known-bad on this stack.
 
 ## Success criteria
 
@@ -123,10 +128,13 @@ Fill in once verified.
 
 ## Known gotchas
 
-- **Qt must use EGL, not GLX.** On X11 set `QT_XCB_GL_INTEGRATION=xcb_egl`
-  before `QApplication` is constructed (the run scripts do this). Otherwise
-  Qt creates a GLX context and `NvBufSurfaceMapEglImage`'s `EGLImage` is
-  not bindable in it.
+- **This stack defaults to GLX, not EGL.** On the tested DS9.0 + NVIDIA 580 +
+  Qt6 + X11 stack, `QOpenGLWidget` renders a correct internal FBO under both
+  integrations, but only `xcb_glx` successfully composes that FBO to the
+  visible window. `xcb_egl` produces a pure-black window with no GL error.
+  The run script therefore defaults to `QT_XCB_GL_INTEGRATION=xcb_glx`.
+  Set `ALLOW_EGL=1` only for diagnostics or if we later move to a
+  `QOpenGLWindow`-based path.
 - **Compatibility profile, not Core.** `samplerExternalOES` and the
   `GL_OES_EGL_image_external` extension only work in Compat profile on
   desktop NVIDIA GL. The shaders use `#version 120 + #extension`.
@@ -140,11 +148,17 @@ Fill in once verified.
   happen on the Qt GL thread. The `new-sample` callback runs on a
   GStreamer streaming thread; it `emit`s the new-frame signal which is
   delivered as a `Qt::QueuedConnection`.
-- **Driver version.** Tested target is `RTX 5070 Ti` (Blackwell sm_120).
-  Driver must support both NvBufSurface EGLImage export and desktop
-  `GL_OES_EGL_image_external`. Any recent prop driver (>= 535) is expected
-  to work; if the EGLImage binds but the texture renders black, suspect a
-  driver/profile mismatch.
+- **EGL vs GLX trade-off.** GLX is the tactical default because it presents
+  correctly through `QOpenGLWidget` on the tested stack. EGL remains the more
+  future-facing choice for Wayland and for a purer EGLImage story, but on this
+  environment it requires moving away from `QOpenGLWidget` to avoid the black
+  compose path. If a future platform forces EGL, the first fallback should be
+  `QOpenGLWindow` via `createWindowContainer`, not forcing `xcb_egl` back into
+  the current widget design.
+- **Driver version.** Tested target is desktop NVIDIA 580.126.09. Driver must
+  support both NvBufSurface EGLImage export and desktop
+  `GL_OES_EGL_image_external`. If the window presents but the texture itself is
+  black, suspect an EGLImage/GL interop issue rather than the Qt compose path.
 
 ## Next
 

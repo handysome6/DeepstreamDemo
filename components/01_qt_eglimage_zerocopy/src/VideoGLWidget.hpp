@@ -6,6 +6,8 @@
 #include <QOpenGLVertexArrayObject>
 #include <QOpenGLWidget>
 
+#include <cuda_gl_interop.h>
+
 struct FrameHolder;
 
 class VideoGLWidget : public QOpenGLWidget, protected QOpenGLFunctions {
@@ -24,16 +26,21 @@ protected:
     void paintGL() override;
 
 private:
+    void releaseCudaInterop();
+    bool ensureTextureForFrame(const FrameHolder& holder);
+    bool uploadFrameToTexture(const FrameHolder& holder);
+
     GLuint m_texture = 0;
     GLuint m_vbo     = 0;
-    QOpenGLVertexArrayObject m_vao;        // mandatory in Core profile
+    QOpenGLVertexArrayObject m_vao;
     QOpenGLShaderProgram* m_program = nullptr;
+    cudaGraphicsResource* m_cudaGlResource = nullptr;
+    int m_textureWidth  = 0;
+    int m_textureHeight = 0;
 
     // Two-slot pipeline:
-    //   m_nextHolder    : freshly arrived frame, not yet bound to GL.
-    //   m_currentHolder : last frame whose EGLImage is currently bound to
-    //                     m_texture. Released only after the next frame
-    //                     overwrites the binding in paintGL.
+    //   m_nextHolder    : freshly arrived frame, not yet copied into GL.
+    //   m_currentHolder : last frame successfully copied into m_texture.
     FrameHolder* m_nextHolder    = nullptr;
     FrameHolder* m_currentHolder = nullptr;
 

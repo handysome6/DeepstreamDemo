@@ -8,13 +8,15 @@ set(CMAKE_AUTOMOC ON)
 # ─── Qt 6 ─────────────────────────────────────────────────────────────────
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets OpenGL OpenGLWidgets)
 
-# ─── GStreamer + EGL via pkg-config ───────────────────────────────────────
+# ─── GStreamer via pkg-config ──────────────────────────────────────────────
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GST REQUIRED IMPORTED_TARGET
     gstreamer-1.0
     gstreamer-app-1.0
     gstreamer-video-1.0)
-pkg_check_modules(EGL REQUIRED IMPORTED_TARGET egl)
+
+# ─── CUDA toolkit for CUDA-GL interop ──────────────────────────────────────
+find_package(CUDAToolkit REQUIRED)
 
 # ─── DeepStream / NvBufSurface ────────────────────────────────────────────
 # Override with -DDEEPSTREAM_DIR=/your/path if installed elsewhere.
@@ -44,7 +46,8 @@ add_executable(qt_eglimage_zerocopy
 
 target_include_directories(qt_eglimage_zerocopy PRIVATE
     src
-    ${NVBUFSURFACE_INCLUDE_DIR})
+    ${NVBUFSURFACE_INCLUDE_DIR}
+    ${CUDAToolkit_INCLUDE_DIRS})
 
 target_link_libraries(qt_eglimage_zerocopy PRIVATE
     Qt6::Core
@@ -53,7 +56,7 @@ target_link_libraries(qt_eglimage_zerocopy PRIVATE
     Qt6::OpenGL
     Qt6::OpenGLWidgets
     PkgConfig::GST
-    PkgConfig::EGL
+    CUDA::cudart
     ${NVBUFSURFACE_LIB})
 
 # Surface the DeepStream lib path at runtime so we don't need LD_LIBRARY_PATH.

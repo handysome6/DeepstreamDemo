@@ -9,20 +9,21 @@ extern "C" {
 #include <nvbufsurface.h>
 }
 
-#include <EGL/egl.h>
-#include <EGL/eglext.h>
-
 #include <string>
 
-// Holds everything needed to keep an EGLImage alive while Qt renders it.
-// Destruction order is important: unmap EGL first, then unmap the GstBuffer,
-// then unref the GstSample.
+// Holds one dGPU-friendly CUDA-device frame long enough for the GL thread to
+// copy it into a GL texture. Ownership still follows GstBuffer -> GstSample.
 struct FrameHolder {
     GstSample*    sample        = nullptr;
     GstBuffer*    buffer        = nullptr;
     GstMapInfo    mapInfo{};
     NvBufSurface* surface       = nullptr;
-    EGLImageKHR   eglImage      = EGL_NO_IMAGE_KHR;
+    uint32_t      width         = 0;
+    uint32_t      height        = 0;
+    uint32_t      pitch         = 0;
+    int           memType       = 0;
+    int           colorFormat   = 0;
+    int           layout        = 0;
     guint64       pts           = 0;
     qint64        captureWallNs = 0;
 
@@ -31,9 +32,6 @@ struct FrameHolder {
     FrameHolder& operator=(const FrameHolder&) = delete;
 
     ~FrameHolder() {
-        if (surface) {
-            NvBufSurfaceUnMapEglImage(surface, 0);
-        }
         if (buffer) {
             gst_buffer_unmap(buffer, &mapInfo);
         }

@@ -45,13 +45,13 @@ if command -v xhost >/dev/null 2>&1; then
     trap 'xhost -local:root >/dev/null 2>&1 || true' EXIT
 fi
 
-QT_GL_INT=xcb_egl
-[[ "${ALLOW_GLX:-0}" == "1" ]] && QT_GL_INT=xcb_glx
+QT_GL_INT=xcb_glx
+[[ "${ALLOW_EGL:-0}" == "1" ]] && QT_GL_INT=xcb_egl
 
 docker run --rm --gpus all --net=host --entrypoint bash \
     -e DISPLAY="${DISPLAY:-:0}" \
     -e QT_XCB_GL_INTEGRATION="$QT_GL_INT" \
-    -e ALLOW_GLX="${ALLOW_GLX:-}" \
+    -e ALLOW_EGL="${ALLOW_EGL:-}" \
     -e XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}" \
     -v "${XAUTHORITY:-$HOME/.Xauthority}:${XAUTHORITY:-$HOME/.Xauthority}:ro" \
     -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
