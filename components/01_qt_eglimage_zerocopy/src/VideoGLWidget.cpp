@@ -239,30 +239,32 @@ void VideoGLWidget::paintGL() {
         const double avg = m_frameCount ? double(m_latencySumMs) / m_frameCount : 0.0;
         const int W = width()  > 0 ? width()  : 1;
         const int H = height() > 0 ? height() : 1;
-        struct Pt { const char* name; int x, y; };
-        const Pt pts[] = {
-            {"center", W/2, H/2},
-            {"BL",     2,   2},
-            {"BR",     W-3, 2},
-            {"TL",     2,   H-3},
-            {"TR",     W-3, H-3},
-        };
-        QString probe;
-        for (const auto& p : pts) {
-            unsigned char rgba[4]{};
-            glReadPixels(p.x, p.y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
-            probe += QString(" %1=(%2,%3,%4)")
-                .arg(p.name).arg(rgba[0]).arg(rgba[1]).arg(rgba[2]);
+        int nonBlack = 0;
+        int bright = 0;
+        int samples = 0;
+        for (int gy = 1; gy <= 5; ++gy) {
+            for (int gx = 1; gx <= 5; ++gx) {
+                const int x = (gx * W) / 6;
+                const int y = (gy * H) / 6;
+                unsigned char rgba[4]{};
+                glReadPixels(x, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+                const int sum = int(rgba[0]) + int(rgba[1]) + int(rgba[2]);
+                if (sum > 12) ++nonBlack;
+                if (sum > 384) ++bright;
+                ++samples;
+            }
         }
 
         qInfo().noquote() << QString(
-            "fps=%1  ingest-to-paint avg=%2 ms  max=%3 ms | tex=%4x%5 | FBO probe:%6")
+            "fps=%1  ingest-to-paint avg=%2 ms  max=%3 ms | tex=%4x%5 | FBO grid nonBlack=%6/%7 bright=%8")
             .arg(m_frameCount)
             .arg(avg, 0, 'f', 1)
             .arg(m_latencyMaxMs)
             .arg(m_textureWidth)
             .arg(m_textureHeight)
-            .arg(probe);
+            .arg(nonBlack)
+            .arg(samples)
+            .arg(bright);
 
         m_frameCount   = 0;
         m_latencySumMs = 0;

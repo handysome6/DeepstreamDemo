@@ -70,13 +70,14 @@ Dependencies:
 
 ## Run
 
-The default pipeline uses `videotestsrc` so you can validate the component
-with no camera and no DeepStream installed beyond the libs:
+The default pipeline uses `videotestsrc pattern=ball` so you can validate the
+component with no camera and no DeepStream installed beyond the libs:
 
 ```bash
 ./scripts/run_videotestsrc.sh
 # or, inside the containerized dev setup used in this repo:
-./scripts/run_in_container.sh
+./scripts/run_in_container.sh          # moving ball, best for human visual check
+./scripts/run_in_container.sh smpte    # full-frame bars, best for machine checks
 ```
 
 For a real RTSP camera (still no DeepStream pipeline yet — this is the bare
@@ -89,9 +90,14 @@ NVMM path):
 You should see a window with the test pattern (or live video) animating
 smoothly, and a periodic stdout line similar to:
 
+```text
+fps=30  ingest-to-paint avg=0.3 ms  max=1 ms | tex=1920x1080 | FBO grid nonBlack=24/25 bright=15
 ```
-fps=30  ingest-to-paint avg=0.3 ms  max=1 ms | FBO probe: ...
-```
+
+Interpretation:
+- `pattern=ball`: best for human visual confirmation that motion is visible
+- `pattern=smpte`: best for machine checks, because a full-frame pattern makes
+  the `FBO grid nonBlack=...` statistic stable and meaningful
 
 For diagnostics, `ALLOW_EGL=1 ./scripts/run_in_container.sh` forces the old
 `xcb_egl` path that is currently known-bad on this stack.

@@ -3,7 +3,8 @@
 # Forwards X11 display so the QOpenGLWidget window appears on the host.
 #
 # Usage:
-#   ./scripts/run_in_container.sh                       # videotestsrc
+#   ./scripts/run_in_container.sh                       # videotestsrc ball
+#   ./scripts/run_in_container.sh smpte                 # videotestsrc smpte
 #   ./scripts/run_in_container.sh "<gst pipeline str>"  # custom pipeline
 #   ./scripts/run_in_container.sh rtsp                  # RTSP preset (URL via $RTSP_URL)
 
@@ -25,8 +26,15 @@ VIDEOTESTSRC_PIPELINE+='nvvideoconvert ! '
 VIDEOTESTSRC_PIPELINE+='video/x-raw(memory:NVMM),format=RGBA ! '
 VIDEOTESTSRC_PIPELINE+='appsink name=sink'
 
+SMPTE_PIPELINE='videotestsrc is-live=true pattern=smpte ! '
+SMPTE_PIPELINE+='video/x-raw,width=1920,height=1080,framerate=30/1 ! '
+SMPTE_PIPELINE+='nvvideoconvert ! '
+SMPTE_PIPELINE+='video/x-raw(memory:NVMM),format=RGBA ! '
+SMPTE_PIPELINE+='appsink name=sink'
+
 case "${1:-videotestsrc}" in
     videotestsrc) PIPELINE="$VIDEOTESTSRC_PIPELINE" ;;
+    smpte) PIPELINE="$SMPTE_PIPELINE" ;;
     rtsp)
         URL="${RTSP_URL:?set RTSP_URL=rtsp://...}"
         PIPELINE="rtspsrc location=$URL latency=0 drop-on-latency=true ! "

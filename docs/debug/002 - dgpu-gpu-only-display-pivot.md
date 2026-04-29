@@ -151,9 +151,10 @@ though it is no longer “strict zero-copy”.
 ## Next steps after this document
 
 1. Fix the automated validation strategy:
-   - either change the default synthetic source to `pattern=smpte`, or
-   - keep `pattern=ball` for human visual testing and add a separate
-     machine-checkable mode.
+   - keep `pattern=ball` for human visual testing
+   - add `pattern=smpte` as a separate machine-checkable mode
+   - replace the old 5-point probe with a coarse grid `nonBlack / bright`
+     statistic so sparse-content frames no longer look falsely black
 2. Run `nsys` against the new path and verify:
    - no `cuMemcpyDtoH`
    - no `cuMemcpyHtoD`
