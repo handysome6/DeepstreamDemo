@@ -22,7 +22,7 @@ fi
 VIDEOTESTSRC_PIPELINE='videotestsrc is-live=true pattern=ball ! '
 VIDEOTESTSRC_PIPELINE+='video/x-raw,width=1920,height=1080,framerate=30/1 ! '
 VIDEOTESTSRC_PIPELINE+='nvvideoconvert ! '
-VIDEOTESTSRC_PIPELINE+='video/x-raw(memory:NVMM),format=NV12 ! '
+VIDEOTESTSRC_PIPELINE+='video/x-raw(memory:NVMM),format=RGBA ! '
 VIDEOTESTSRC_PIPELINE+='appsink name=sink'
 
 case "${1:-videotestsrc}" in
@@ -32,7 +32,7 @@ case "${1:-videotestsrc}" in
         PIPELINE="rtspsrc location=$URL latency=0 drop-on-latency=true ! "
         PIPELINE+="rtph264depay ! h264parse ! nvh264dec ! "
         PIPELINE+='nvvideoconvert ! '
-        PIPELINE+='video/x-raw(memory:NVMM),format=NV12 ! '
+        PIPELINE+='video/x-raw(memory:NVMM),format=RGBA ! '
         PIPELINE+='appsink name=sink'
         ;;
     *) PIPELINE="$1" ;;
@@ -45,9 +45,13 @@ if command -v xhost >/dev/null 2>&1; then
     trap 'xhost -local:root >/dev/null 2>&1 || true' EXIT
 fi
 
+QT_GL_INT=xcb_egl
+[[ "${ALLOW_GLX:-0}" == "1" ]] && QT_GL_INT=xcb_glx
+
 docker run --rm --gpus all --net=host --entrypoint bash \
     -e DISPLAY="${DISPLAY:-:0}" \
-    -e QT_XCB_GL_INTEGRATION=xcb_egl \
+    -e QT_XCB_GL_INTEGRATION="$QT_GL_INT" \
+    -e ALLOW_GLX="${ALLOW_GLX:-}" \
     -e XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}" \
     -v "${XAUTHORITY:-$HOME/.Xauthority}:${XAUTHORITY:-$HOME/.Xauthority}:ro" \
     -v /tmp/.X11-unix:/tmp/.X11-unix:rw \

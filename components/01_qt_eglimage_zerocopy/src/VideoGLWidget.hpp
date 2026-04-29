@@ -3,6 +3,7 @@
 #include <QElapsedTimer>
 #include <QOpenGLFunctions>
 #include <QOpenGLShaderProgram>
+#include <QOpenGLVertexArrayObject>
 #include <QOpenGLWidget>
 
 struct FrameHolder;
@@ -25,6 +26,7 @@ protected:
 private:
     GLuint m_texture = 0;
     GLuint m_vbo     = 0;
+    QOpenGLVertexArrayObject m_vao;        // mandatory in Core profile
     QOpenGLShaderProgram* m_program = nullptr;
 
     // Two-slot pipeline:
