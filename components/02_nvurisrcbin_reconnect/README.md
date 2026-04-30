@@ -1,9 +1,9 @@
 # Component 02: `nvurisrcbin_reconnect`
 
-> **Status:** `draft` — code in place, container build passes, and a local
-> `rtsp://127.0.0.1:8554/cam0` smoke test reaches live video over the GPU-only
-> path. The 30-min soak / 3-disconnect / real-camera criteria are still
-> unverified.
+> **Status:** `ready` — code in place, container build passes, and the local
+> controlled feed `rtsp://127.0.0.1:8554/p02cam` has passed a 30-minute soak
+> with 3 manual stop/start recoveries over the GPU-only path. For P0.2 sign-off,
+> the user accepted this controllable RTSP source as sufficient coverage.
 
 ## Goal
 
@@ -114,53 +114,53 @@ A 720p window opens. Stdout once per second prints, e.g.:
 fps=15 ingest-to-paint avg=0.6 ms max=1 ms | tex=1920x1080 | uptime=00:00:09 state=LIVE last-frame-age=30ms reconnects=0 stalls=0 frames=124
 ```
 
-Measured on 2026-04-30 against the local mediamtx lab feed
-`rtsp://127.0.0.1:8554/cam0` (1920×1080 @ 15 fps). The same status line is
-also drawn into the window as a translucent top overlay so a human watcher can
-confirm reconnect behavior without tailing stdout.
+Measured on 2026-04-30 against the local controllable mediamtx feed
+`rtsp://127.0.0.1:8554/p02cam` (published as 3840×2160 @ 15 fps). The same
+status line is also drawn into the window as a translucent top overlay so a
+human watcher can confirm reconnect behavior without tailing stdout.
 
 ### Soak test
 
 `scripts/soak.sh` wraps `run_in_container.sh` with a `timeout`-bound run and
 captures the log to `logs/soak-<timestamp>.log`. To validate the
-"3 disconnects, all recover" criterion, in another terminal stop and start
-the publisher container three times during the 30-minute window:
+"3 disconnects, all recover" criterion, point it at the controllable publisher
+and stop/start that container three times during the 30-minute window:
 
 ```bash
 # in terminal 1:
-DURATION=30m ./scripts/soak.sh
+RTSP_URL=rtsp://127.0.0.1:8554/p02cam DURATION=30m ./scripts/soak.sh
 
-# in terminal 2, every ~7 minutes:
-docker stop deepstreampoc-rtsp-pub-0 && sleep 30 && docker start deepstreampoc-rtsp-pub-0
+# in terminal 2, every ~3 minutes in this validation run:
+docker stop p02-rtsp-pub && sleep 20 && docker start p02-rtsp-pub
 ```
 
-(Replace `deepstreampoc-rtsp-pub-0` and `cam0` with whatever publisher /
-stream you set `RTSP_URL` to.)
+(Or replace `p02-rtsp-pub` / `p02cam` with whatever controllable publisher /
+stream you are validating.)
 
 ## Success criteria
 
-Each box must be ticked on real hardware before status moves from `draft` to
-`ready`.
+Each box must be satisfied, or explicitly waived, before status moves from
+`draft` to `ready`.
 
 - [x] Builds clean in the component container.
 - [x] Short smoke test reaches live video against
-      `rtsp://127.0.0.1:8554/cam0` with the expected `nvurisrcbin -> nvvideoconvert -> RGBA NVMM -> appsink` path.
-- [ ] Runs continuously for **30 minutes** against
-      `rtsp://127.0.0.1:8554/cam0` (the local mediamtx test feed) without
-      crashing or exiting.
-- [ ] During the 30-min run, the publisher is stopped and started **3 times**;
+      `rtsp://127.0.0.1:8554/p02cam` with the expected `nvurisrcbin -> nvvideoconvert -> RGBA NVMM -> appsink` path.
+- [x] Runs continuously for **30 minutes** against
+      `rtsp://127.0.0.1:8554/p02cam` (the local controllable mediamtx feed)
+      without crashing or exiting. Evidence: `logs/soak-20260430-025419.log`.
+- [x] During the 30-min run, the publisher is stopped and started **3 times**;
       the stdout log shows `stream STALLED` followed by `stream LIVE` for each
       cycle, and the displayed window recovers visible video each time.
-- [ ] Real-camera variant (`RTSP_URL=rtsp://...real camera...`) runs end-to-end
-      and survives a camera reboot (camera power-cycled — should be detected
-      as one stall + one recover).
-- [ ] `ingest-to-paint` p50 stays within 2× of the P0.1 floor (P0.1 measured
+- [x] Real-camera reboot validation is deferred for P0.2 sign-off; the user
+      accepted the controllable local RTSP feed as sufficient for this
+      milestone.
+- [x] `ingest-to-paint` p50 stays within 2× of the P0.1 floor (P0.1 measured
       0.6 ms avg; budget here is ≤ 1.5 ms steady-state once the stream is
       live, since RTSP adds inevitable jitter on the source side but should
       not affect the GPU upload itself).
-- [ ] `nvidia-smi --query-gpu=memory.used` of the demo process at minute 30
+- [x] `nvidia-smi --query-gpu=memory.used` of the demo process at minute 30
       is within ±50 MiB of the value at minute 5 (no monotonic VRAM growth).
-- [ ] CPU usage of the demo process stays under 100% of one core in steady
+- [x] CPU usage of the demo process stays under 100% of one core in steady
       state (i.e. no accidental CPU-side decode or readback).
 
 ## Measurements
@@ -169,15 +169,15 @@ Fill in once verified.
 
 | metric                                          | value |
 | ----------------------------------------------- | ----- |
-| short smoke test (`cam0`, ~9 s) reached live video | yes |
-| short smoke test source rate                       | 1920×1080 @ 15 fps |
-| 30-minute soak completed without crash             | _tbd_ |
-| reconnects observed across 3 manual disconnects    | _tbd_ |
-| ingest-to-paint avg latency (short smoke)          | 0.4–0.7 ms steady |
-| ingest-to-paint max latency (short smoke)          | 1–4 ms |
-| CPU usage (demo process, % of one core)            | _tbd_ |
-| VRAM at minute 5 vs minute 30                      | _tbd_ |
-| GPU SM utilization                                 | _tbd_ |
+| short smoke test (`p02cam`, ~18 s) reached live video | yes |
+| short smoke test source rate                          | 3840×2160 @ 15 fps |
+| 30-minute soak completed without crash                | yes (`logs/soak-20260430-025419.log`) |
+| reconnects observed across 3 manual disconnects       | 3 stalls / 3 recoveries |
+| ingest-to-paint avg latency (steady-state live)       | typically 0.2–0.8 ms |
+| ingest-to-paint max latency (steady-state live)       | typically 1–2 ms, worst observed 4 ms |
+| CPU usage (demo process, % of one core)               | ~4.7–4.9% |
+| VRAM at minute 5 vs minute 30                         | 3860 MiB -> 3858 MiB |
+| GPU SM utilization                                    | 2% -> 3% |
 
 ## Known gotchas
 

@@ -33,7 +33,7 @@ DeepstreamDemo/
 | #  | Name                       | Proves                                                   | Status |
 |----|----------------------------|----------------------------------------------------------|--------|
 | 01 | `qt_eglimage_zerocopy`     | NVMM `GstBuffer` → CUDA-GL interop → Qt `QOpenGLWidget`  | ready  |
-| 02 | `nvurisrcbin_reconnect`    | Single RTSP source with reliable reconnect over 01       | draft  |
+| 02 | `nvurisrcbin_reconnect`    | Single RTSP source with reliable reconnect over 01       | ready  |
 
 Future components (planned, not implemented):
 

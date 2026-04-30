@@ -9,9 +9,9 @@
 #   RTSP_URL=rtsp://... ./scripts/soak.sh
 #
 # To validate the "manual disconnect 3 times" criterion, in another terminal:
-#   docker stop deepstreampoc-rtsp-pub-0     # for the cam0 publisher
-#   sleep 30
-#   docker start deepstreampoc-rtsp-pub-0
+#   docker stop p02-rtsp-pub
+#   sleep 20
+#   docker start p02-rtsp-pub
 # Repeat until the binary's stdout has logged at least 3 reconnects.
 
 set -euo pipefail
