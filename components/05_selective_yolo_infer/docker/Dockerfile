@@ -23,8 +23,9 @@ RUN apt-get update -qq && \
 RUN test -d /usr/lib/x86_64-linux-gnu/cmake/Qt6 \
     && echo "Qt6 cmake config found"
 
+# Build-time check is intentionally limited to plugins whose .so files do not
+# have a hard libcuda.so.1 / libnvidia-ml.so.1 link — those resolve only when
+# the container is run with --gpus. nvinfer / nvdsosd / nvstreammux are pulled
+# in at runtime and verified by the actual pipeline build.
 RUN gst-inspect-1.0 nvurisrcbin >/dev/null \
-    && gst-inspect-1.0 nvinfer    >/dev/null \
-    && gst-inspect-1.0 nvdsosd    >/dev/null \
-    && gst-inspect-1.0 nvstreammux >/dev/null \
-    && echo "nvurisrcbin / nvinfer / nvdsosd / nvstreammux plugins found"
+    && echo "nvurisrcbin plugin found at build time"

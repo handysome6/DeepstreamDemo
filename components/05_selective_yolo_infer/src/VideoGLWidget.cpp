@@ -1,5 +1,5 @@
 #include "VideoGLWidget.hpp"
-#include "RtspSource.hpp"
+#include "RtspInferSource.hpp"
 
 #include <QDateTime>
 #include <QDebug>

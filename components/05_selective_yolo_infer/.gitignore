@@ -1,0 +1,4 @@
+build/
+logs/
+models/yolov8n.*
+models/lib*.so
