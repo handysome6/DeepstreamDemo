@@ -1,0 +1,45 @@
+# YOLOv8 slot for P0.5.
+#
+# This file is intentionally a TEMPLATE. nvinfer cannot decode raw YOLOv8 ONNX
+# output without a custom bbox-parser library (the standard YOLOv8 head shape
+# [batch, 84, 8400] does not match nvinfer's built-in parsers). The accepted
+# in-tree path on DS9.0 is:
+#
+#   1. Stage a YOLOv8 ONNX at models/yolov8n.onnx (see scripts/fetch_models.sh).
+#   2. Build a custom parser library, either:
+#        - the marcoslucianops/DeepStream-Yolo parser
+#          (https://github.com/marcoslucianops/DeepStream-Yolo, MIT-licensed),
+#          built into models/libnvdsinfer_custom_impl_Yolo.so; or
+#        - export the ONNX with EfficientNMS_TRT fused, in which case the
+#          built-in parser works but the export tooling lives outside this
+#          component.
+#   3. Point parse-bbox-func-name + custom-lib-path below at that build.
+#
+# Until step 2 is done, do *not* pass --infer-config configs/config_infer_primary_yolov8.txt
+# at runtime; the default TrafficCamNet config is the supported zero-friction
+# path. This file exists so the swap is one config change instead of a code
+# refactor.
+
+[property]
+gpu-id=0
+net-scale-factor=0.00392156862745098
+onnx-file=models/yolov8n.onnx
+model-engine-file=models/yolov8n.onnx_b1_gpu0_fp16.engine
+labelfile-path=configs/labels_coco80.txt
+batch-size=1
+process-mode=1
+model-color-format=0
+## 0=FP32, 1=INT8, 2=FP16
+network-mode=2
+num-detected-classes=80
+interval=0
+gie-unique-id=1
+## 4=No clustering — the parser library is expected to do its own NMS.
+cluster-mode=4
+## Required: replace the two paths below with your built parser.
+# parse-bbox-func-name=NvDsInferParseYolo
+# custom-lib-path=models/libnvdsinfer_custom_impl_Yolo.so
+
+[class-attrs-all]
+pre-cluster-threshold=0.25
+topk=300

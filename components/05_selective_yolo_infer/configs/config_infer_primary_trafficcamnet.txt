@@ -1,0 +1,42 @@
+# P0.5 default detector config.
+#
+# Uses the ResNet18 TrafficCamNet primary detector that ships with DeepStream
+# 9.0 at /opt/nvidia/deepstream/deepstream-9.0/samples/models/Primary_Detector.
+#
+# Why this is the *default*: the architecture rule is that a component must
+# stand up on a fresh checkout without external downloads. TrafficCamNet is
+# already inside the container image and produces real bounding boxes on
+# people / vehicles, which gives nvdsosd something visible to draw and is
+# enough to prove the per-stream "selective inference" shape.
+#
+# To swap to YOLO once the model is staged, copy this file and change the
+# model paths plus the parser block. See configs/config_infer_primary_yolov8.txt
+# for the YOLO slot.
+
+[property]
+gpu-id=0
+net-scale-factor=0.00392156862745098
+onnx-file=/opt/nvidia/deepstream/deepstream-9.0/samples/models/Primary_Detector/resnet18_trafficcamnet_pruned.onnx
+model-engine-file=/opt/nvidia/deepstream/deepstream-9.0/samples/models/Primary_Detector/resnet18_trafficcamnet_pruned.onnx_b1_gpu0_fp16.engine
+labelfile-path=/opt/nvidia/deepstream/deepstream-9.0/samples/models/Primary_Detector/labels.txt
+int8-calib-file=/opt/nvidia/deepstream/deepstream-9.0/samples/models/Primary_Detector/cal_trt.bin
+batch-size=1
+process-mode=1
+model-color-format=0
+## 0=FP32, 1=INT8, 2=FP16
+network-mode=2
+num-detected-classes=4
+interval=0
+gie-unique-id=1
+## 1=DBSCAN, 2=NMS, 3= DBSCAN+NMS Hybrid, 4=None
+cluster-mode=2
+
+[class-attrs-all]
+topk=20
+nms-iou-threshold=0.5
+pre-cluster-threshold=0.2
+
+[class-attrs-0]
+topk=20
+nms-iou-threshold=0.5
+pre-cluster-threshold=0.4
