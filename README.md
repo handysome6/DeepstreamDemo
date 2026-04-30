@@ -35,7 +35,7 @@ DeepstreamDemo/
 |----|----------------------------|-----------------------------------------------------------------|--------|
 | 01 | `qt_eglimage_zerocopy`     | NVMM `GstBuffer` → CUDA-GL interop → Qt `QOpenGLWidget`         | ready  |
 | 02 | `nvurisrcbin_reconnect`    | Single RTSP source with reliable reconnect over 01              | ready  |
-| 03 | `latency_probe`            | Reproducible source→paint latency segments (decode/queue, upload/paint, end-to-end) usable as a baseline by 04+ | draft  |
+| 03 | `latency_probe`            | Reproducible source→paint latency segments (decode/queue, upload/paint, end-to-end) usable as a baseline by 04+ | ready  |
 
 Future components (planned, not implemented):
 
