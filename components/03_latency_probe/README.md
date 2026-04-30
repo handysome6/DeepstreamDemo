@@ -321,9 +321,9 @@ Validated 2026-04-30 on RTX 5090 dGPU host.
 
 ## Next
 
-- **Unblocks 04 (`selective_yolo_batch`):** 04 is allowed to assert
-  "selective inference adds ≤ X ms to `end_to_end`" only by running with
-  the probe enabled and citing the CSV.
+- **Unblocks 04 (`multi_rtsp_widgets`):** 04 is allowed to make any per-stream
+  latency statement only by running with this probe enabled and citing the CSV
+  or the same segment definitions.
 - **Reused by 06 (`multi_widget_canvas`):** the same contract, with the
-  per-source caveat in the gotchas above, becomes the per-stream budget
-  ceiling.
+  per-source caveat in the gotchas above, remains the per-stream budget
+  ceiling when those streams are later integrated into one canvas.

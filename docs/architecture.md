@@ -72,13 +72,15 @@ The end-state we are heading toward, once components are individually proven:
 
 ```
 01_qt_eglimage_zerocopy   ──┐
-02_nvurisrcbin_reconnect  ──┤ 6 streams ──► display in 06_multi_widget_canvas
-                            │
-04_selective_yolo_batch   ──┤ overlays bounding boxes on 2 of 6 streams
-                            │
-05_cuda_stitch_appsink_loop ┘ stitches 2 of 6 streams into one virtual stream
+02_nvurisrcbin_reconnect  ──┼─► 04_multi_rtsp_widgets
+03_latency_probe          ──┘      proves several independent RTSP widgets can stay live together
+                                     and recover per-stream without collapsing the whole viewer
 
-03_latency_probe is woven into all of the above.
+04_multi_rtsp_widgets     ──► 05_cuda_stitch_appsink_loop
+                             stitches selected streams into one virtual stream
+
+04_multi_rtsp_widgets     ──► 06_multi_widget_canvas
+                             collapses multiple proven per-stream textures into one integrated canvas
 ```
 
 We do not start building integration components (06+) until 01–05 are each

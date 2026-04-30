@@ -236,6 +236,8 @@ past on this stack.
 - **Component 02** (`nvurisrcbin_reconnect`) replaces the source with
   `nvurisrcbin` and proves robust RTSP reconnect over the same GPU-only
   display contract.
-- **Component 06** (`multi_widget_canvas`) extends to N independent
-  CUDA-bound textures composited inside one `QOpenGLWidget` — the actual
-  production form.
+- **Component 04** (`multi_rtsp_widgets`) is the first multi-stream extension:
+  N independent `RtspSource` + `QOpenGLWidget` pairs running concurrently over
+  the same GPU-only path.
+- **Component 06** (`multi_widget_canvas`) is the later integration step that
+  collapses multiple proven per-stream textures into one shared canvas.

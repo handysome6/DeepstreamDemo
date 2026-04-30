@@ -232,6 +232,8 @@ Fill in once verified.
 
 - **Component 03** (`latency_probe`) gives us a measurement floor that lets
   us *prove* the latency claim above rather than asserting it.
-- **Component 06** (`multi_widget_canvas`) extends to N independent
-  `RtspSource`s and N CUDA-bound textures composited inside one
-  `QOpenGLWidget`. P0.2 is the per-source contract that 06 will lean on.
+- **Component 04** (`multi_rtsp_widgets`) lifts this exact per-source contract
+  into several concurrent `RtspSource` + widget pairs and proves that one
+  stream's stall/reconnect does not collapse the others.
+- **Component 06** (`multi_widget_canvas`) remains the later step that
+  integrates multiple already-proven per-stream textures into one canvas.
