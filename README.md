@@ -27,7 +27,8 @@ DeepstreamDemo/
     ├── 01_qt_eglimage_zerocopy/    P0.1: NVMM → Qt OpenGL GPU-only display
     ├── 02_nvurisrcbin_reconnect/   P0.2: single RTSP source + reconnect
     ├── 03_latency_probe/           P0.3: source→paint latency measurement contract
-    └── 04_multi_rtsp_widgets/      P0.4: independent multi-RTSP widget proof
+    ├── 04_multi_rtsp_widgets/      P0.4: independent multi-RTSP widget proof
+    └── 05_selective_yolo_infer/    P0.5: per-stream selective YOLO inference
 ```
 
 ## Component Index
@@ -38,10 +39,10 @@ DeepstreamDemo/
 | 02 | `nvurisrcbin_reconnect`    | Single RTSP source with reliable reconnect over 01              | ready  |
 | 03 | `latency_probe`            | Reproducible source→paint latency segments (decode/queue, upload/paint, end-to-end) usable as a baseline by 04+ | ready  |
 | 04 | `multi_rtsp_widgets`       | Multiple independent RTSP streams displayed in separate Qt widgets with per-stream reconnect/failure isolation | draft |
+| 05 | `selective_yolo_infer`     | Per-stream selective YOLO inference (nvstreammux/nvinfer/nvdsosd) on a subset of P0.4 panels with runtime mode flips and failure isolation | ready |
 
 Future components (planned, not implemented):
 
-| 05 | `cuda_stitch_appsink_loop` | NVMM stitching via appsink → CUDA → appsrc round-trip | tbd |
 | 06 | `multi_widget_canvas`      | Multiple per-stream GPU textures integrated into one Qt canvas | tbd |
 
 ## How to add a new component

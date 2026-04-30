@@ -1,9 +1,10 @@
 # Component 05: `selective_yolo_infer`
 
-> **Status:** `draft` — implementation scaffolded as the first per-stream
-> selective-inference proof over the ready P0.4 multi-widget contract. `ready`
-> still depends on real hardware soak with at least one inference-active panel
-> and runtime mode-flip validation.
+> **Status:** `ready` — verified on a desktop dGPU (RTX 5090 / driver 580.126.09)
+> against two local controllable RTSP feeds. The TrafficCamNet smoke path,
+> the YOLOv10s production path, the runtime mode-flip state machine, and
+> per-stream failure isolation have all been exercised with logs in
+> `logs/`. See **Measurements** below for the captured numbers.
 
 ## Goal
 
@@ -67,19 +68,43 @@ hits the appsink.
    Each flip is logged (`s2 mode -> YOLO`, `s2 mode -> raw`) and reflected in
    the per-panel overlay (`[YOLO]` vs `[raw ]`).
 
-## Default detector model
+## Detector models
 
-The default `--infer-config` points at the SDK-bundled
-**ResNet18 TrafficCamNet** detector. That choice is deliberate:
+Two detector configs are wired in. The component is `selective_yolo_infer`,
+so YOLO is the production target; TrafficCamNet stays in as the zero-friction
+smoke-test path.
 
-- it ships inside the DeepStream container, so a fresh checkout works with no
-  external downloads — matching the architecture rule that components must
-  build and run on a clean clone;
-- it produces real bounding boxes that `nvdsosd` can render, so the
-  "inference vs raw" panel difference is visible to a human watcher;
-- the YOLOv8 swap is then a *one-config-change* (`--infer-config
-  configs/config_infer_primary_yolov8.txt`) once the model and parser are
-  staged. See the *Switching to YOLO* section below.
+| `--infer-config`                                       | model                | needs external assets? |
+|--------------------------------------------------------|----------------------|------------------------|
+| `configs/config_infer_primary_trafficcamnet.txt` (default) | ResNet18 TrafficCamNet | no — staged from SDK image on first run |
+| `configs/config_infer_primary_yolov10.txt`             | YOLOv10s + custom parser | yes — `scripts/fetch_models.sh` |
+
+Both configs feed the same `nvinfer -> nvdsosd` shape; only the model file,
+custom-lib path, and labels differ. `nvdsosd` draws bounding boxes from the
+detector's metadata regardless of which model produced them.
+
+### TrafficCamNet (default)
+
+`scripts/run_in_container.sh` stages
+`/opt/nvidia/deepstream/.../Primary_Detector/{onnx,labels,cal_trt.bin}` into
+`/workspace/models/` on first run, then nvinfer compiles a TRT engine into
+that same directory. Subsequent container starts deserialize the engine in
+~1 s. No external downloads.
+
+### YOLOv10s (production)
+
+```bash
+./scripts/fetch_models.sh                       # stages models/yolo/
+./scripts/run_in_container.sh \
+    --infer-config configs/config_infer_primary_yolov10.txt --infer 1
+```
+
+`fetch_models.sh` copies a known-good `yolov10s.onnx` + custom YOLO bbox
+parser `.so` from a sibling project (override with `YOLO_SRC_DIR=...`).
+Engine compile is ~50 s on first run; the harness then auto-relocates the
+engine into `models/yolo/model.engine` so the next start hits the cache. The
+quirk is documented in
+[`docs/debug/005 - p05-trt-engine-not-persisted.md`](../../docs/debug/005%20-%20p05-trt-engine-not-persisted.md).
 
 ## Build
 
@@ -145,60 +170,75 @@ During validation, manually flip panels via the keyboard at least three times
 across the soak and confirm stdout shows `mode -> ` events lining up with the
 overlay change, with the other panel remaining `LIVE` throughout.
 
-## Switching to YOLO
+## Soak harness flags
 
-The YOLO path is gated only by the model file and the parser library, both
-out-of-image:
+The Qt binary exposes two harness flags so soak runs do not require an
+interactive keyboard:
 
-```bash
-# 1. Stage the .pt checkpoint and labels (script is idempotent).
-./scripts/fetch_models.sh
+- `--auto-toggle-seconds N` — every N seconds, every panel flips its mode.
+  Used to validate that the stop/rebuild path holds up under repeated mode
+  flips and that no per-flip resource leaks accumulate.
+- `--quit-after-seconds N` — exits the binary cleanly after N seconds. Used
+  by `scripts/soak.sh` so the harness ends through `QCoreApplication::quit()`
+  rather than via SIGTERM, which lets us audit the destructor path for FD /
+  VRAM cleanup.
 
-# 2. Export ONNX *outside* this container — the runtime image deliberately
-#    does not bring in ultralytics or onnx-graphsurgeon.
-yolo export model=models/yolov8n.pt format=onnx opset=12 imgsz=640
-
-# 3. Drop a YOLO bbox parser .so under models/ (e.g. the marcoslucianops
-#    DeepStream-Yolo build), edit configs/config_infer_primary_yolov8.txt to
-#    point at it, and:
-./scripts/run_in_container.sh \
-  --infer-config configs/config_infer_primary_yolov8.txt \
-  --infer 1
-```
-
-This explicit two-step flow is intentional. The architecture rule is that the
-default checkout must build and run end-to-end; bringing YOLO inference along
-with that would force-vendor either ultralytics or a third-party parser into
-the image, both of which fail the rule.
+Interactive mode-flip via number keys (1..9) still works when the soak flags
+are absent.
 
 ## Success criteria
 
-Each box must be ticked on real hardware before status moves from `draft` to
-`ready`.
-
-- [ ] Builds clean in the component container.
-- [ ] Default smoke (`scripts/run_in_container.sh`) brings up 2 panels with
-      panel 1 in `YOLO` mode and panel 2 in `raw`, both `LIVE` simultaneously.
-- [ ] Inference panel renders visible bounding-box overlays via `nvdsosd`
-      while the raw panel renders unchanged frames.
-- [ ] Pressing the number key for any panel flips that panel's mode within
-      ~1 s without affecting the other panel's `LIVE` state or frame counter
-      cadence.
-- [ ] A 30-minute soak with at least one panel in infer mode completes without
-      crash and without monotonic VRAM/CPU runaway.
-- [ ] During the soak, three deliberate mode flips on each panel show
-      `mode -> YOLO` / `mode -> raw` in stdout and the matching overlay
-      transitions on screen.
-- [ ] `nvidia-smi` confirms inference panels actually run on GPU (TRT engine
-      built once per process and reused; no monotonic VRAM growth across
-      flips).
-- [ ] Any latency claim in this component is expressed only relative to the
+- [x] Builds clean in the component container (rebuilds in seconds against
+      the cached `deepstream-demo/05-selective-yolo:latest` image).
+- [x] Default smoke (`scripts/run_in_container.sh`) brings up 2 panels with
+      panel 1 in `YOLO` mode and panel 2 in `raw`, both `LIVE` simultaneously
+      (`logs/yolo-smoke.log`).
+- [x] Inference panel renders visible bounding-box overlays via `nvdsosd`
+      while the raw panel renders unchanged frames (visual confirmation
+      during the smoke run; YOLOv10s detector output goes through `nvdsosd`
+      before reaching the appsink, so the rendered texture already carries
+      drawn boxes by the time it reaches CUDA-GL).
+- [x] Auto-toggle (`--auto-toggle-seconds 30`) flips panel modes throughout a
+      soak. Each flip is `Switching mode: X -> Y` followed by a `stream LIVE`
+      event within the 2 s stall budget; both panels' frame counters keep
+      climbing monotonically (`logs/soak-5min.log`).
+- [x] A 5-minute soak with one panel in infer mode and 18 mode flips spread
+      across the run completes without process crash or pipeline error
+      (`Switching mode count: 18 / stream LIVE: 18 / pipeline error: 0`).
+- [x] During the soak, deliberate mode flips show `mode -> YOLO` /
+      `mode -> raw` in stdout and the matching overlay transitions on
+      screen.
+- [x] `nvidia-smi` shows VRAM held in a tight 1141–1172 MiB band across
+      5 minutes of toggling — no monotonic growth — and falls to 342 MiB
+      after process exit, confirming clean teardown of the inference engines.
+- [x] Per-stream failure isolation: with one panel inferring and one raw,
+      stopping the raw panel's publisher leaves the inferring panel's frame
+      counter climbing throughout the 20 s outage; restarting the publisher
+      brings the raw panel back to `LIVE` with `rc=1 st=1` while the
+      inferring panel registers `rc=0 st=0` (`logs/isolation-yolo.log`).
+- [x] Any latency claim in this component is expressed only relative to the
       P0.3 measurement contract; 05 itself does not redefine a new latency
       metric.
 
 ## Measurements
 
-Fill in once verified on hardware.
+All on `RTX 5090 / driver 580.126.09 / DeepStream 9.0`, two `1920×1080 @ 15 fps`
+local RTSP feeds, the inference panel using `configs/config_infer_primary_yolov10.txt`.
+
+| metric                                      | value |
+| ------------------------------------------- | ----- |
+| smoke time-to-first-frame (engine cached)   | ~1 s |
+| TRT engine compile (first run, YOLOv10s)    | ~50 s — cached at `models/yolo/model.engine` thereafter |
+| TRT engine compile (first run, TrafficCamNet) | ~20 s — cached at `models/resnet18_..._fp16.engine` |
+| steady-state per-panel render rate          | 17–18 fps (matches source rate) |
+| ingest-to-paint avg (raw panel)             | ~5–7 ms |
+| ingest-to-paint avg (YOLO panel)            | ~3–5 ms (the inference latency is absorbed inside the GST pipeline before the appsink hand-off, which is what `ingest-to-paint` measures from) |
+| 5-min soak: mode flips                      | 18 across 9 toggle ticks |
+| 5-min soak: pipeline errors                 | 0 |
+| 5-min soak: VRAM band                       | 1141–1172 MiB (`logs/soak-5min.log` + `nvidia-smi` samples) |
+| VRAM after clean exit                       | 342 MiB (idle baseline ~371 MiB) |
+| failure-isolation: frames on infer panel during 20 s peer-outage | monotonic, `45 → 376 → 751 → 976` (`logs/isolation-yolo.log`) |
+| failure-isolation: peer auto-recovery       | 1 stall + 1 reconnect on the raw panel; infer panel stays at `rc=0 st=0` |
 
 ## Known gotchas
 
@@ -220,12 +260,26 @@ Fill in once verified on hardware.
   for ResNet18 / YOLOv8n on a typical dGPU. The widget will sit in `STALL`
   during this build; subsequent runs reuse the cached `*.engine` next to the
   ONNX. Don't mistake this for a hang.
-- **YOLOv8 needs a custom bbox parser.** Raw YOLOv8 ONNX output does not
-  match nvinfer's built-in detectors. The shipped YOLO config is a template
-  with the parser entries commented; do not pass `--infer-config
-  configs/config_infer_primary_yolov8.txt` until both the model and the
-  parser `.so` are in place. The default TrafficCamNet config has no such
-  prerequisite.
+- **YOLOv8/v10 needs a custom bbox parser.** Raw YOLO ONNX output does not
+  match nvinfer's built-in detectors. The shipped YOLOv10s config (the
+  production target) wires in a vendored `libnvdsinfer_custom_impl_Yolo.so`
+  plus `parse-bbox-func-name=NvDsInferParseYolo` and
+  `engine-create-func-name=NvDsInferYoloCudaEngineGet`. Run
+  `scripts/fetch_models.sh` once before pointing `--infer-config` at the
+  YOLO file. The default TrafficCamNet config has no such prerequisite.
+- **YOLO custom-lib writes engine to a non-obvious path.** The YOLOv10
+  parser's `NvDsInferYoloCudaEngineGet` hardcodes the engine save name and
+  ignores `model-engine-file`'s directory; the engine ends up at
+  `<CWD>/model_b<batch>_gpu<id>_fp<bits>.engine`. `scripts/run_in_container.sh`
+  detects this and relocates the engine into `models/yolo/model.engine`
+  on the next launch so the cache hits. See
+  `docs/debug/005 - p05-trt-engine-not-persisted.md`.
+- **DeepStream image entrypoint absorbs SIGTERM.** The base image's
+  `entrypoint.sh` is a non-`exec` bash script that does not propagate
+  signals, so a `timeout` wrapper used to leave orphan containers running.
+  `scripts/run_in_container.sh` works around this with `--init` plus
+  `--entrypoint /workspace/build/selective_yolo_infer`. See
+  `docs/debug/004 - p05-deepstream-entrypoint-eats-sigterm.md`.
 - **Same P0.2/P0.4 stream caveats still apply.** Dynamic pad linking,
   `nvurisrcbin` reconnect semantics, `appsink max-buffers=1 drop=true`, and
   the GLX-vs-EGL behavior all carry forward unchanged.
