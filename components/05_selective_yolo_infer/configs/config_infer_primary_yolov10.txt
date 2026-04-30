@@ -1,0 +1,44 @@
+# YOLOv10s primary detector for P0.5.
+#
+# This config is the production target for "selective YOLO inference" — it
+# pulls in a real YOLOv10s ONNX plus a custom bbox parser library that knows
+# how to decode YOLOv10's NMS-free output. Both files are external assets
+# staged by scripts/fetch_models.sh.
+#
+# Why YOLOv10 specifically (not v8): we already have a working v10s ONNX +
+# parser .so in a sibling project (DeepstreamPOC/models/yolo/), licensed and
+# already verified against this exact DeepStream 9.0 nvinfer ABI. Reusing it
+# costs nothing and avoids re-building a parser from scratch. If you swap in
+# YOLOv8 or a newer variant, you also need to swap the parser .so.
+#
+# Required staged files under models/yolo/ (created by fetch_models.sh):
+#   - yolov10s.onnx
+#   - yolov10s.onnx.data         (external weights for the ONNX)
+#   - libnvdsinfer_custom_impl_Yolo.so
+#   - labels.txt                 (COCO 80 class names)
+# The TRT engine model.engine is regenerated on first run inside this dir.
+
+[property]
+gpu-id=0
+net-scale-factor=0.0039215697906911373
+model-color-format=0
+gie-unique-id=1
+network-type=0
+process-mode=1
+batch-size=1
+interval=0
+network-mode=2
+num-detected-classes=80
+maintain-aspect-ratio=1
+symmetric-padding=1
+cluster-mode=4
+labelfile-path=/workspace/models/yolo/labels.txt
+onnx-file=/workspace/models/yolo/yolov10s.onnx
+model-engine-file=/workspace/models/yolo/model.engine
+custom-lib-path=/workspace/models/yolo/libnvdsinfer_custom_impl_Yolo.so
+parse-bbox-func-name=NvDsInferParseYolo
+engine-create-func-name=NvDsInferYoloCudaEngineGet
+
+[class-attrs-all]
+pre-cluster-threshold=0.25
+topk=300

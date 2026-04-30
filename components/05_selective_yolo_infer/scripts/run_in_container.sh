@@ -18,13 +18,23 @@ fi
 # nvinfer writes the engine alongside the ONNX file regardless of
 # model-engine-file, so the ONNX itself has to live under /workspace.
 mkdir -p "$ROOT/models"
-PRIMARY_DETECTOR_SDK="${PRIMARY_DETECTOR_SDK:-$ROOT/../../components/05_selective_yolo_infer/_sdk}"
 if [[ ! -f "$ROOT/models/resnet18_trafficcamnet_pruned.onnx" ]]; then
     echo "[run_in_container] staging TrafficCamNet ONNX into models/ via the build image"
     docker run --rm --entrypoint bash \
         -v "$ROOT:/workspace" \
         "$IMAGE" \
         -c 'cp -n /opt/nvidia/deepstream/deepstream-9.0/samples/models/Primary_Detector/resnet18_trafficcamnet_pruned.onnx /workspace/models/ && cp -n /opt/nvidia/deepstream/deepstream-9.0/samples/models/Primary_Detector/labels.txt /workspace/models/ && cp -n /opt/nvidia/deepstream/deepstream-9.0/samples/models/Primary_Detector/cal_trt.bin /workspace/models/ && chown -R '"$(id -u):$(id -g)"' /workspace/models'
+fi
+
+# YOLOv10 engine quirk: the custom NvDsInferYoloCudaEngineGet function in
+# libnvdsinfer_custom_impl_Yolo.so writes the engine to <CWD>/model_b<N>_gpu<g>_fp<bits>.engine,
+# ignoring model-engine-file's directory. So if a fresh build dropped the
+# engine at /workspace/model_b1_gpu0_fp16.engine, relocate it under
+# models/yolo/ where the YOLO config expects it.
+if [[ -f "$ROOT/model_b1_gpu0_fp16.engine" && ! -f "$ROOT/models/yolo/model.engine" ]]; then
+    mkdir -p "$ROOT/models/yolo"
+    mv "$ROOT/model_b1_gpu0_fp16.engine" "$ROOT/models/yolo/model.engine"
+    echo "[run_in_container] relocated YOLO engine to models/yolo/model.engine"
 fi
 
 if command -v xhost >/dev/null 2>&1; then

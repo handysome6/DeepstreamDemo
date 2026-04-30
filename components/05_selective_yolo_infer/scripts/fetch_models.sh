@@ -1,50 +1,70 @@
 #!/usr/bin/env bash
-# Stages model assets for component 05.
+# Stages model assets for component 05 into models/.
 #
-# - TrafficCamNet (the zero-friction default): nothing to do, ships in the
-#   DeepStream image. The default nvinfer config points directly at
-#   /opt/nvidia/deepstream/deepstream-9.0/samples/models/Primary_Detector.
+# Two paths are supported:
 #
-# - YOLOv8: this script only fetches the .pt checkpoint and the COCO labels.
-#   ONNX export still requires ultralytics + onnx, which we deliberately do
-#   NOT install into the runtime image. Run the export step on a host that has
-#   ultralytics, e.g. `yolo export model=yolov8n.pt format=onnx opset=12 imgsz=640`,
-#   then drop the resulting yolov8n.onnx alongside this directory under
-#   ./models/, plus the matching parser library.
+# 1. TrafficCamNet (the zero-friction default)
+#    Nothing to do here — scripts/run_in_container.sh stages the SDK-shipped
+#    ONNX/labels/cal_trt.bin into /workspace/models on first invocation.
+#
+# 2. YOLOv10s (the production target for "selective YOLO inference")
+#    A working v10s ONNX + custom bbox parser .so already lives in the
+#    sibling project at ../../DeepstreamPOC/models/yolo/. We copy it in
+#    instead of re-fetching/exporting from scratch.
+#
+# Override YOLO_SRC_DIR if your YOLO assets live elsewhere. The destination
+# layout under models/yolo/ must match the paths in
+# configs/config_infer_primary_yolov10.txt.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 MODELS_DIR="$ROOT/models"
-CONFIGS_DIR="$ROOT/configs"
-mkdir -p "$MODELS_DIR" "$CONFIGS_DIR"
+YOLO_DIR="$MODELS_DIR/yolo"
+mkdir -p "$YOLO_DIR"
 
-YOLO_PT_URL="${YOLO_PT_URL:-https://github.com/ultralytics/assets/releases/download/v8.3.0/yolov8n.pt}"
-COCO_LABELS_URL="${COCO_LABELS_URL:-https://raw.githubusercontent.com/AlexeyAB/darknet/master/data/coco.names}"
+YOLO_SRC_DIR="${YOLO_SRC_DIR:-$ROOT/../../../DeepstreamPOC/models/yolo}"
 
 if [[ "${SKIP_YOLO:-0}" == "1" ]]; then
-    echo "[fetch_models] SKIP_YOLO=1, skipping YOLO checkpoint fetch."
+    echo "[fetch_models] SKIP_YOLO=1 — skipping YOLO asset staging."
     exit 0
 fi
 
-if [[ ! -f "$MODELS_DIR/yolov8n.pt" ]]; then
-    echo "[fetch_models] downloading $YOLO_PT_URL -> models/yolov8n.pt"
-    curl -fL "$YOLO_PT_URL" -o "$MODELS_DIR/yolov8n.pt"
-else
-    echo "[fetch_models] models/yolov8n.pt already present"
+if [[ ! -d "$YOLO_SRC_DIR" ]]; then
+    cat >&2 <<EOF
+[fetch_models] YOLO source directory not found: $YOLO_SRC_DIR
+
+If you have the assets elsewhere, set YOLO_SRC_DIR to a directory that
+contains:
+    yolov10s.onnx
+    yolov10s.onnx.data
+    libnvdsinfer_custom_impl_Yolo.so
+    labels.txt
+
+Otherwise, set SKIP_YOLO=1 to leave the YOLO config unwired and run with the
+default --infer-config configs/config_infer_primary_trafficcamnet.txt.
+EOF
+    exit 1
 fi
 
-if [[ ! -f "$CONFIGS_DIR/labels_coco80.txt" ]]; then
-    echo "[fetch_models] downloading $COCO_LABELS_URL -> configs/labels_coco80.txt"
-    curl -fL "$COCO_LABELS_URL" -o "$CONFIGS_DIR/labels_coco80.txt"
-else
-    echo "[fetch_models] configs/labels_coco80.txt already present"
-fi
+REQUIRED=(yolov10s.onnx yolov10s.onnx.data libnvdsinfer_custom_impl_Yolo.so labels.txt)
+missing=0
+for f in "${REQUIRED[@]}"; do
+    if [[ ! -f "$YOLO_SRC_DIR/$f" ]]; then
+        echo "[fetch_models] missing in source: $YOLO_SRC_DIR/$f" >&2
+        missing=1
+    fi
+done
+[[ $missing -eq 0 ]] || exit 1
+
+for f in "${REQUIRED[@]}"; do
+    if [[ ! -f "$YOLO_DIR/$f" ]] || [[ "$YOLO_SRC_DIR/$f" -nt "$YOLO_DIR/$f" ]]; then
+        cp -v "$YOLO_SRC_DIR/$f" "$YOLO_DIR/$f"
+    fi
+done
 
 cat <<EOF
-[fetch_models] checkpoint staged at models/yolov8n.pt
-[fetch_models] next steps for the YOLO path are MANUAL — see configs/config_infer_primary_yolov8.txt:
-  - export ONNX (ultralytics): yolo export model=models/yolov8n.pt format=onnx opset=12 imgsz=640
-  - build a parser .so (marcoslucianops/DeepStream-Yolo or similar) into models/libnvdsinfer_custom_impl_Yolo.so
-  - drop the resulting .onnx and .so under models/ then point --infer-config at configs/config_infer_primary_yolov8.txt
+[fetch_models] YOLOv10s assets staged under models/yolo/.
+[fetch_models] To run the component with this YOLO config:
+  ./scripts/run_in_container.sh --infer-config configs/config_infer_primary_yolov10.txt --infer 1
 EOF
