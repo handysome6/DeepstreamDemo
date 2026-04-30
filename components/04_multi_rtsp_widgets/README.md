@@ -112,28 +112,64 @@ failure isolation, not merely reconnect in the abstract.
 
 Each box must be ticked on real hardware before status moves to `ready`.
 
-- [ ] Builds clean in the component container.
-- [ ] Two explicit `--uri` panels reach live video simultaneously over the same
+- [x] Builds clean in the component container.
+- [x] Two explicit `--uri` panels reach live video simultaneously over the same
       GPU-only path proven by P0.2.
-- [ ] Four-panel launch with `--cols 2` opens a stable grid and each panel's
+- [x] Four-panel launch with `--cols 2` opens a stable grid and each panel's
       overlay updates independently.
 - [ ] A 30-minute soak with at least 2 panels completes without process crash
       or manual restart.
-- [ ] During the soak, manually stopping one panel's publisher causes only that
+- [x] During the soak, manually stopping one panel's publisher causes only that
       panel to enter `STALL`; the untouched panels remain `LIVE` and continue
       increasing frame counters.
-- [ ] After that publisher returns, the affected panel returns to `LIVE`
+- [x] After that publisher returns, the affected panel returns to `LIVE`
       without requiring the other panels to restart.
-- [ ] Repeating the same test on a different panel shows the same isolation and
+- [x] Repeating the same test on a different panel shows the same isolation and
       recovery behavior.
 - [ ] `nvidia-smi` / runtime logs do not show obvious monotonic VRAM or CPU
       runaway in steady state.
-- [ ] Any latency claim in this component is expressed only relative to the P0.3
+- [x] Any latency claim in this component is expressed only relative to the P0.3
       measurement contract; 04 itself does not redefine a new latency metric.
 
 ## Measurements
 
-Fill in once verified on hardware.
+### 2026-05-01 four-stream isolation run
+
+Log:
+
+```text
+components/04_multi_rtsp_widgets/logs/soak-20260501-001210.log
+```
+
+Shape under test:
+
+```bash
+DURATION=150s ./scripts/soak.sh \
+  --cols 2 \
+  --uri rtsp://127.0.0.1:8554/cam0 \
+  --uri rtsp://127.0.0.1:8554/cam1 \
+  --uri rtsp://127.0.0.1:8554/cam2 \
+  --uri rtsp://127.0.0.1:8554/cam3
+```
+
+Observed evidence:
+
+- Initial four-stream convergence succeeded: `s1 LIVE`, `s2 LIVE`, `s3 LIVE`,
+  `s4 LIVE`, followed by aggregate `multi status` with all four panels live.
+- `cam1` interruption isolated correctly:
+  - `s2 STALLED age=2007ms (rtsp://127.0.0.1:8554/cam1)`
+  - while `s1`, `s3`, and `s4` remained `LIVE` and kept increasing `f=`.
+- `cam3` interruption isolated correctly later in the same run:
+  - `s4 STALLED age=2177ms (rtsp://127.0.0.1:8554/cam3)`
+  - while `s1` and `s3` stayed `LIVE`, and `s2` remained the only previously
+    stalled panel until its publisher returned.
+- Recovery was observed for both interrupted panels without restarting the app:
+  - `s4 LIVE (rtsp://127.0.0.1:8554/cam3)` with subsequent aggregate status
+    showing `s4=LIVE age=34ms rc=1 st=1 f=877`
+  - `s2 LIVE (rtsp://127.0.0.1:8554/cam1)` with subsequent aggregate status
+    showing `s2=LIVE age=8ms rc=1 st=1 f=328`
+- This run proves per-stream failure isolation and per-stream recovery inside a
+  four-widget viewer, but it is not the final 30-minute readiness soak.
 
 ## Known gotchas
 
@@ -146,6 +182,10 @@ Fill in once verified on hardware.
 - **The same P0.2 stream caveats still apply.** Dynamic pad linking,
   `nvurisrcbin` reconnect semantics, `appsink max-buffers=1 drop=true`, and the
   GLX-vs-EGL behavior all carry forward unchanged.
+- **This RTSP lab's publishers are not restartable with `docker start`.** In the
+  observed local lab, stopping a publisher removed its container, so recovery
+  testing required recreating the publisher container with `docker run` instead
+  of assuming a stopped container still exists.
 
 ## Next
 
