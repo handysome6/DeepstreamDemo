@@ -16,10 +16,21 @@
 [property]
 gpu-id=0
 net-scale-factor=0.00392156862745098
-onnx-file=/opt/nvidia/deepstream/deepstream-9.0/samples/models/Primary_Detector/resnet18_trafficcamnet_pruned.onnx
-model-engine-file=/opt/nvidia/deepstream/deepstream-9.0/samples/models/Primary_Detector/resnet18_trafficcamnet_pruned.onnx_b1_gpu0_fp16.engine
-labelfile-path=/opt/nvidia/deepstream/deepstream-9.0/samples/models/Primary_Detector/labels.txt
-int8-calib-file=/opt/nvidia/deepstream/deepstream-9.0/samples/models/Primary_Detector/cal_trt.bin
+# Both ONNX and the engine live under /workspace/models so the TRT-compiled
+# engine survives across container instances. nvinfer writes the engine to a
+# path it derives from the ONNX directory (model-engine-file is consulted only
+# on read), so simply pointing model-engine-file at /workspace would NOT work
+# unless the ONNX itself is also under /workspace.
+#
+# scripts/run_in_container.sh stages the SDK-shipped ONNX / labels / int8 cal
+# into /workspace/models/ on first run. Without that staging, the first
+# container build is fine but every subsequent run pays a fresh ~20 s engine
+# rebuild because the SDK directory is part of the container's ephemeral
+# layer.
+onnx-file=/workspace/models/resnet18_trafficcamnet_pruned.onnx
+model-engine-file=/workspace/models/resnet18_trafficcamnet_pruned.onnx_b1_gpu0_fp16.engine
+labelfile-path=/workspace/models/labels.txt
+int8-calib-file=/workspace/models/cal_trt.bin
 batch-size=1
 process-mode=1
 model-color-format=0

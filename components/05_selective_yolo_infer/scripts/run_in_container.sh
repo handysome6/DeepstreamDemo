@@ -13,9 +13,22 @@ if [[ ! -x "$BINARY" ]]; then
     exit 1
 fi
 
+# Stage the SDK-shipped TrafficCamNet model into the bind-mounted models/
+# directory so the TRT-compiled engine survives across container instances.
+# nvinfer writes the engine alongside the ONNX file regardless of
+# model-engine-file, so the ONNX itself has to live under /workspace.
+mkdir -p "$ROOT/models"
+PRIMARY_DETECTOR_SDK="${PRIMARY_DETECTOR_SDK:-$ROOT/../../components/05_selective_yolo_infer/_sdk}"
+if [[ ! -f "$ROOT/models/resnet18_trafficcamnet_pruned.onnx" ]]; then
+    echo "[run_in_container] staging TrafficCamNet ONNX into models/ via the build image"
+    docker run --rm --entrypoint bash \
+        -v "$ROOT:/workspace" \
+        "$IMAGE" \
+        -c 'cp -n /opt/nvidia/deepstream/deepstream-9.0/samples/models/Primary_Detector/resnet18_trafficcamnet_pruned.onnx /workspace/models/ && cp -n /opt/nvidia/deepstream/deepstream-9.0/samples/models/Primary_Detector/labels.txt /workspace/models/ && cp -n /opt/nvidia/deepstream/deepstream-9.0/samples/models/Primary_Detector/cal_trt.bin /workspace/models/ && chown -R '"$(id -u):$(id -g)"' /workspace/models'
+fi
+
 if command -v xhost >/dev/null 2>&1; then
     xhost +local:root >/dev/null
-    trap 'xhost -local:root >/dev/null 2>&1 || true' EXIT
 fi
 
 QT_GL_INT=xcb_glx
@@ -39,7 +52,23 @@ if [[ $has_infer_flag -eq 0 ]]; then
     args=("${args[@]}" --infer 1)
 fi
 
-docker run --rm --gpus all --net=host \
+# --init             : install tini as PID 1 so SIGTERM from `timeout` /
+#                       Ctrl-C reliably reaches the Qt binary.
+# --entrypoint <bin> : skip the DeepStream image's bash entrypoint.sh; that
+#                       shell does not exec its child, so SIGTERM never reaches
+#                       the binary and orphan containers pile up after `timeout`.
+# --name             : stable handle for `docker stop` cleanup if the host
+#                       script is interrupted before the container exits.
+CONTAINER_NAME="${COMPONENT_CONTAINER_NAME:-p05-selective-yolo-$(date +%Y%m%d-%H%M%S)-$$}"
+
+cleanup_container() {
+    docker stop "$CONTAINER_NAME" >/dev/null 2>&1 || true
+}
+trap 'cleanup_container; xhost -local:root >/dev/null 2>&1 || true' EXIT INT TERM
+
+docker run --rm --init --gpus all --net=host \
+    --name "$CONTAINER_NAME" \
+    --entrypoint /workspace/build/selective_yolo_infer \
     -e DISPLAY="${DISPLAY:-:0}" \
     -e QT_XCB_GL_INTEGRATION="$QT_GL_INT" \
     -e ALLOW_EGL="${ALLOW_EGL:-}" \
@@ -51,4 +80,4 @@ docker run --rm --gpus all --net=host \
     -v "$ROOT:/workspace" \
     -w /workspace \
     "$IMAGE" \
-    /workspace/build/selective_yolo_infer "${args[@]}"
+    "${args[@]}"

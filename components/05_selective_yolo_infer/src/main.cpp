@@ -178,6 +178,14 @@ int main(int argc, char* argv[]) {
         "Grid column count.", "n", "2");
     QCommandLineOption titleOpt(QStringList() << "title",
         "Top-level window title.", "text", "");
+    QCommandLineOption autoToggleOpt(QStringList() << "auto-toggle-seconds",
+        "If set and >0, every N seconds flip every panel's mode. Used to exercise "
+        "the selective-inference state machine without an interactive keyboard.",
+        "n", "0");
+    QCommandLineOption quitAfterOpt(QStringList() << "quit-after-seconds",
+        "If set and >0, exit cleanly after N seconds. Used by soak harnesses to "
+        "guarantee a graceful teardown for memory / FD audits.",
+        "n", "0");
 
     parser.addOption(uriOpt);
     parser.addOption(inferOpt);
@@ -192,6 +200,8 @@ int main(int argc, char* argv[]) {
     parser.addOption(stallTimeoutOpt);
     parser.addOption(colsOpt);
     parser.addOption(titleOpt);
+    parser.addOption(autoToggleOpt);
+    parser.addOption(quitAfterOpt);
     parser.process(app);
 
     QStringList uris = parser.values(uriOpt);
@@ -378,6 +388,36 @@ int main(int argc, char* argv[]) {
         qInfo().noquote() << aggregateStatusLine(panels, elapsed);
     });
     summaryTimer.start(kSummaryLogMs);
+
+    const int autoToggleS = parser.value(autoToggleOpt).toInt();
+    QTimer autoToggleTimer;
+    if (autoToggleS > 0) {
+        QObject::connect(&autoToggleTimer, &QTimer::timeout, [&]() {
+            for (PanelState& panel : panels) {
+                const auto cur = panel.source->currentMode();
+                const auto next = (cur == RtspInferSource::Mode::Infer)
+                    ? RtspInferSource::Mode::Raw : RtspInferSource::Mode::Infer;
+                if (!panel.source->setMode(next)) {
+                    qWarning().noquote() << QString("%1 auto-toggle failed").arg(panel.label);
+                }
+            }
+        });
+        autoToggleTimer.start(autoToggleS * 1000);
+        qInfo().noquote() << QString("Auto-toggle enabled: every %1 s every panel flips mode")
+            .arg(autoToggleS);
+    }
+
+    const int quitAfterS = parser.value(quitAfterOpt).toInt();
+    QTimer quitTimer;
+    if (quitAfterS > 0) {
+        quitTimer.setSingleShot(true);
+        QObject::connect(&quitTimer, &QTimer::timeout, &app, [quitAfterS]() {
+            qInfo().noquote() << QString("--quit-after-seconds=%1 fired; exiting cleanly")
+                .arg(quitAfterS);
+            QCoreApplication::quit();
+        });
+        quitTimer.start(quitAfterS * 1000);
+    }
 
     const int rc = app.exec();
     for (PanelState& panel : panels) {

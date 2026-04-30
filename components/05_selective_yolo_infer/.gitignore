@@ -1,4 +1,8 @@
 build/
 logs/
-models/yolov8n.*
-models/lib*.so
+# All model artifacts are reproduced on demand:
+#   - TrafficCamNet (.onnx / labels.txt / cal_trt.bin) staged by
+#     scripts/run_in_container.sh from the SDK image on first run;
+#   - YOLOv8 (.pt / .onnx / parser .so) staged by scripts/fetch_models.sh.
+# The TRT-compiled .engine is also regenerable.
+models/
