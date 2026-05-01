@@ -1,0 +1,6 @@
+build/
+logs/
+# Model artifacts are staged on demand from a sibling project (or copied
+# from 05's models/yolo/) — see scripts/fetch_models.sh. The TRT-compiled
+# .engine is also regenerable.
+models/

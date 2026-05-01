@@ -1,0 +1,17 @@
+{
+  "mode": "calibrated",
+  "outputWidth": 3840,
+  "outputHeight": 4288,
+  "overlapPx": 32,
+  "enableBlend": true,
+  "topSourceFromOutput": [
+    1.0, 0.0, 0.0,
+    0.0, 1.0, 0.0,
+    0.0, 0.0, 1.0
+  ],
+  "bottomSourceFromOutput": [
+    1.0, 0.0, 0.0,
+    0.0, 1.0, -2128.0,
+    0.0, 0.0, 1.0
+  ]
+}
