@@ -28,7 +28,8 @@ DeepstreamDemo/
     ├── 02_nvurisrcbin_reconnect/   P0.2: single RTSP source + reconnect
     ├── 03_latency_probe/           P0.3: source→paint latency measurement contract
     ├── 04_multi_rtsp_widgets/      P0.4: independent multi-RTSP widget proof
-    └── 05_selective_yolo_infer/    P0.5: per-stream selective YOLO inference
+    ├── 05_selective_yolo_infer/    P0.5: per-stream selective YOLO inference
+    └── 06_dual_4k_stitch_restream/ P0.6: dual 4K GPU stitch + restream
 ```
 
 ## Component Index
@@ -40,10 +41,7 @@ DeepstreamDemo/
 | 03 | `latency_probe`            | Reproducible source→paint latency segments (decode/queue, upload/paint, end-to-end) usable as a baseline by 04+ | ready  |
 | 04 | `multi_rtsp_widgets`       | Multiple independent RTSP streams displayed in separate Qt widgets with per-stream reconnect/failure isolation | draft |
 | 05 | `selective_yolo_infer`     | Per-stream selective YOLO inference (nvstreammux/nvinfer/nvdsosd) on a subset of P0.4 panels with runtime mode flips and failure isolation | ready |
-
-Future components (planned, not implemented):
-
-| 06 | `multi_widget_canvas`      | Multiple per-stream GPU textures integrated into one Qt canvas | tbd |
+| 06 | `dual_4k_stitch_restream`  | Two 4K RTSP inputs stitched top-bottom in GPU device memory, previewed locally, and restreamed via RTSP RECORD | ready |
 
 ## How to add a new component
 

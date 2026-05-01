@@ -80,10 +80,16 @@ The end-state we are heading toward, once components are individually proven:
                              puts nvinfer + nvdsosd on a runtime-selectable subset of panels
                              without disturbing failure isolation across panels
 
-05_selective_yolo_infer   ──► 06_multi_widget_canvas
-                             collapses multiple proven per-stream textures (some inferred,
-                             some raw) into one integrated canvas
+05_selective_yolo_infer   ──► 06_dual_4k_stitch_restream
+                             proves two 4K RTSP sources can be stitched top-bottom in GPU
+                             device memory, previewed locally, and restreamed live with
+                             calibrated warp + seam blend
 ```
 
 We do not start building integration components (06+) until 01–05 are each
 in `ready` state.
+
+Component 06 is the first production-facing composition proof that is allowed to
+move past “multiple independent viewers” and into “one stitched output”, but it
+still keeps the proof narrow: exactly two 4K RTSP inputs, one GPU stitch path,
+and one validated restream contract.
