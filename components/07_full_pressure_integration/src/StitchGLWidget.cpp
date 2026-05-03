@@ -4,6 +4,7 @@
 #include <QDebug>
 #include <QOpenGLContext>
 #include <QPainter>
+#include <QPen>
 
 #include <cuda_runtime.h>
 
@@ -234,6 +235,8 @@ void StitchGLWidget::paintGL() {
 
     QPainter painter(this);
     painter.setRenderHint(QPainter::TextAntialiasing, true);
+    painter.setPen(QPen(QColor("#008cff"), 1));
+    painter.drawRect(rect().adjusted(0, 0, -1, -1));
     painter.fillRect(QRect(8, 8, width() - 16, 28), QColor(0, 0, 0, 160));
     painter.setPen(Qt::white);
     painter.drawText(QRect(16, 12, width() - 32, 20), Qt::AlignLeft | Qt::AlignVCenter, m_statusLine);

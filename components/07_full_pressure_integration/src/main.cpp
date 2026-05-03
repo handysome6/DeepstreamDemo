@@ -19,17 +19,20 @@
 #include <QApplication>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
+#include <QColor>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
-#include <QGridLayout>
+#include <QHBoxLayout>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QPalette>
 #include <QStringList>
 #include <QSurfaceFormat>
 #include <QTimer>
+#include <QVBoxLayout>
 #include <QWidget>
 
 #include <gst/gst.h>
@@ -225,8 +228,6 @@ int main(int argc, char* argv[]) {
         "the appsink frame is delivered at the source's full 4K — nvinfer "
         "downsamples internally for the network input.",
         "WxH", "3840x2160");
-    QCommandLineOption colsOpt(QStringList() << "cols",
-        "Grid column count.", "n", "4");
     QCommandLineOption titleOpt(QStringList() << "title",
         "Top-level window title.", "text", "");
     QCommandLineOption latencyOpt(QStringList() << "latency",
@@ -254,7 +255,6 @@ int main(int argc, char* argv[]) {
     parser.addOption(inferConfigOpt);
     parser.addOption(calibrationOpt);
     parser.addOption(muxWHOpt);
-    parser.addOption(colsOpt);
     parser.addOption(titleOpt);
     parser.addOption(latencyOpt);
     parser.addOption(noDropOnLatencyOpt);
@@ -306,13 +306,31 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    const int cols = std::max(1, parser.value(colsOpt).toInt());
-
     QWidget window;
-    auto* layout = new QGridLayout(&window);
-    layout->setContentsMargins(8, 8, 8, 8);
-    layout->setHorizontalSpacing(8);
-    layout->setVerticalSpacing(8);
+    window.setAutoFillBackground(true);
+    QPalette palette = window.palette();
+    palette.setColor(QPalette::Window, QColor(0, 0, 0));
+    window.setPalette(palette);
+
+    auto* rootLayout = new QHBoxLayout(&window);
+    rootLayout->setContentsMargins(0, 0, 0, 0);
+    rootLayout->setSpacing(0);
+
+    auto* leftColumn = new QVBoxLayout();
+    leftColumn->setContentsMargins(0, 0, 0, 0);
+    leftColumn->setSpacing(0);
+
+    auto* centerColumn = new QVBoxLayout();
+    centerColumn->setContentsMargins(0, 0, 0, 0);
+    centerColumn->setSpacing(0);
+
+    auto* rightColumn = new QVBoxLayout();
+    rightColumn->setContentsMargins(0, 0, 0, 0);
+    rightColumn->setSpacing(0);
+
+    rootLayout->addLayout(leftColumn, 1);
+    rootLayout->addLayout(centerColumn, 3);
+    rootLayout->addLayout(rightColumn, 1);
 
     const QString title = parser.value(titleOpt);
     window.setWindowTitle(title.isEmpty()
@@ -444,7 +462,7 @@ int main(int argc, char* argv[]) {
         pairOpts.maxPairDeltaMs = parser.value(maxPairDeltaOpt).toLongLong();
 
         auto* widget = new StitchGLWidget(&window);
-        widget->setMinimumSize(360, 360);
+        widget->setMinimumSize(960, 720);
         auto* pair = new DualRtspSourcePair(pairOpts, &window);
 
         stitchPanel.label     = QStringLiteral("s1");
@@ -480,27 +498,44 @@ int main(int argc, char* argv[]) {
                          });
     }
 
-    // ---- Lay out widgets in the grid ---------------------------------------
-    int slot = 0;
-    for (RawPanel& panel : rawPanels) {
-        layout->addWidget(panel.widget, slot / cols, slot % cols);
-        ++slot;
+    // ---- Lay out widgets in the production-style shell ---------------------
+    auto addPlaceholder = [&window](QVBoxLayout* column) {
+        auto* spacer = new QWidget(&window);
+        spacer->setAutoFillBackground(true);
+        spacer->setStyleSheet("background: black; border: 1px solid #008cff;");
+        column->addWidget(spacer, 1);
+    };
+
+    for (size_t i = 0; i < rawPanels.size() && i < 3; ++i) {
+        leftColumn->addWidget(rawPanels[i].widget, 1);
+    }
+    for (int i = int(std::min<size_t>(rawPanels.size(), 3)); i < 3; ++i) {
+        addPlaceholder(leftColumn);
     }
     if (yoloPanel.widget) {
-        layout->addWidget(yoloPanel.widget, slot / cols, slot % cols);
-        ++slot;
-    }
-    if (stitchPanel.widget) {
-        // The stitch panel is a 2× tall composition (top-bottom). Span two
-        // grid rows so it doesn't get squeezed.
-        layout->addWidget(stitchPanel.widget, slot / cols, slot % cols, 2, 1);
-        ++slot;
+        leftColumn->addWidget(yoloPanel.widget, 1);
+    } else {
+        addPlaceholder(leftColumn);
     }
 
-    const int totalSlots = slot;
-    const int rows = (totalSlots + cols - 1) / cols;
-    window.resize(cols * 480, std::max(1, rows) * 320);
-    window.show();
+    if (stitchPanel.widget) {
+        centerColumn->addWidget(stitchPanel.widget, 1);
+    } else {
+        auto* centerPlaceholder = new QWidget(&window);
+        centerPlaceholder->setAutoFillBackground(true);
+        centerPlaceholder->setStyleSheet("background: black; border: 1px solid #008cff;");
+        centerColumn->addWidget(centerPlaceholder, 1);
+    }
+
+    for (size_t i = 3; i < rawPanels.size() && i < 7; ++i) {
+        rightColumn->addWidget(rawPanels[i].widget, 1);
+    }
+    for (int i = std::max(3, int(rawPanels.size())); i < 7; ++i) {
+        addPlaceholder(rightColumn);
+    }
+
+    window.resize(2560, 1440);
+    window.showMaximized();
 
     // ---- Start sources -----------------------------------------------------
     bool startOk = true;
@@ -538,13 +573,12 @@ int main(int argc, char* argv[]) {
     }
 
     qInfo().noquote() << QString(
-        "p07 run stage=%1 raw=%2 yolo=%3 stitch=%4 mux=%5x%6 cols=%7")
+        "p07 run stage=%1 raw=%2 yolo=%3 stitch=%4 mux=%5x%6 layout=prod_shell")
         .arg(stage)
         .arg(rawPanels.size())
         .arg(yoloPanel.source ? 1 : 0)
         .arg(stitchPanel.pair ? 1 : 0)
-        .arg(muxW).arg(muxH)
-        .arg(cols);
+        .arg(muxW).arg(muxH);
 
     const qint64 startMs = QDateTime::currentMSecsSinceEpoch();
 

@@ -49,8 +49,14 @@ RTSP 4K top   ─► nvurisrcbin ─► nvvideoconvert ─► RGBA NVMM ─┐
 RTSP 4K bot   ─► nvurisrcbin ─► nvvideoconvert ─► RGBA NVMM ─┘    (calibrated + blend, no restream)
 ```
 
-All 10 widgets live inside one top-level `QWidget` + `QGridLayout` driven by
-a single `QApplication` thread.
+All rendering lives inside one top-level `QWidget` driven by a single
+`QApplication` thread. The shell is a three-column layout: a 4-slot left
+stack, one large center stitch panel, and a 4-slot right stack. Under
+`--stage full`, the left stack is `r1..r3` plus bottom-left `y1`, the center
+is `s1`, and the right stack is `r4..r7`; borders stay flush to the window
+edge with zero layout spacing and 1 px blue outlines. The 8th raw ingest
+pipeline still runs so the original full-pressure mix remains intact, even
+though this production-style shell exposes only 7 raw preview slots.
 
 **GPU-only claim.** Every widget consumes `NvBufSurface` frames in
 `NVBUF_MEM_CUDA_DEVICE` memory and uploads to its GL texture with
@@ -108,8 +114,13 @@ Dependency surface is the union of 04/05/06:
 
 Expected runtime behavior:
 
-- one window with up to 10 `VideoGLWidget`s in a 4-column grid plus the
-  spanning stitch panel.
+- one maximized 3-column production shell: left 4-slot stack, center stitch
+  panel, right 4-slot stack. Under `--stage full`, that maps to `r1..r3` +
+  `y1` on the left, `s1` in the center, and `r4..r7` on the right.
+- any panel omitted by stage selection falls back to a black placeholder with
+  a 1 px blue border so the shell stays gap-free.
+- the 8th raw ingest continues headless to preserve the original
+  `8 × 1080p + 1 × 4K YOLO + 2 × 4K stitch` pressure mix.
 - each panel's overlay reads `rN [raw ] LIVE age=…`, `y1 [YOLO] LIVE age=…`
   or `s1 [STCH] a=LIVE b=LIVE delta=…ms stitched=N OK`.
 - once a second stdout prints `p07 status uptime=… stage=… raw=L/L
@@ -135,8 +146,9 @@ DEGRADED / RECOVERED events.
 - [x] Stage 2 (`--stage plus_yolo`) brings up stage 1 + the 4K YOLO panel
       with visible bounding boxes from `nvdsosd`
       (`logs/stage2-smoke.log`).
-- [x] Stage 3 (`--stage full`) brings up all 10 widgets, all `LIVE` within
-      ~10 s; the stitch panel reports `tex=3840x4288`
+- [x] Stage 3 (`--stage full`) brings up all 10 pipelines, all `LIVE` within
+      ~10 s; the visible shell shows 7 raw previews + 1 YOLO + 1 stitch panel,
+      and the stitch panel reports `tex=3840x4288`
       (`logs/stage3-smoke.log`).
 - [x] 5-minute Stage 4 soak completed without process crash, monotonic VRAM
       growth, or pipeline errors (`logs/soak-20260501-183359.log`).
@@ -155,8 +167,10 @@ DEGRADED / RECOVERED events.
 
 All measurements taken on `RTX 5090 / driver 580.126.09 / DeepStream 9.0`
 against the local mediamtx lab (`cam0..cam3` 1920×1080@15fps, `cam4..cam5`
-3840×2160@15fps). 1080p slots default to duplicating `cam0..cam3` across
-8 widgets; the YOLO panel runs on `cam4` and the stitch pair on `cam4`+
+3840×2160@15fps). The 1080p URIs still fan out across 8 ingest pipelines;
+the production shell shows `r1..r7` as visible raw previews, places the YOLO
+panel on the bottom-left slot, and keeps the 8th raw pipeline active without
+a visible slot. The YOLO panel runs on `cam4` and the stitch pair on `cam4`+
 `cam5`.
 
 ### Convergence — staged ramp
