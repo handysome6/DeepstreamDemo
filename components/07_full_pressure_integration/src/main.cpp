@@ -62,7 +62,7 @@ QString formatHms(qint64 elapsedMs) {
         .arg(s % 60, 2, 10, QChar('0'));
 }
 
-QString resolveInferConfig(const QString& cliValue) {
+QString resolveCliPath(const QString& cliValue) {
     if (cliValue.isEmpty()) return {};
     QFileInfo fi(cliValue);
     if (fi.isAbsolute()) return cliValue;
@@ -70,6 +70,81 @@ QString resolveInferConfig(const QString& cliValue) {
     const QString fallback = QDir::current().filePath(cliValue);
     if (QFileInfo::exists(fallback)) return fallback;
     return cliValue;
+}
+
+struct SourceConfig {
+    QStringList raw1080pUris;
+    QString     yolo4kUri;
+    QString     stitchTopUri;
+    QString     stitchBottomUri;
+};
+
+bool loadSourcesConfig(const QString& path, SourceConfig* out, QString* error) {
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly)) {
+        if (error) *error = QString("failed to open sources config: %1").arg(path);
+        return false;
+    }
+    QJsonParseError parseError{};
+    const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parseError);
+    if (parseError.error != QJsonParseError::NoError || !doc.isObject()) {
+        if (error) *error = QString("invalid sources config json: %1").arg(parseError.errorString());
+        return false;
+    }
+
+    const QJsonObject obj = doc.object();
+    SourceConfig loaded;
+
+    if (obj.contains("raw1080p")) {
+        const QJsonValue value = obj.value("raw1080p");
+        if (!value.isArray()) {
+            if (error) *error = QStringLiteral("raw1080p must be an array of strings");
+            return false;
+        }
+        const QJsonArray arr = value.toArray();
+        for (const QJsonValue& item : arr) {
+            if (!item.isString()) {
+                if (error) *error = QStringLiteral("raw1080p entries must all be strings");
+                return false;
+            }
+            loaded.raw1080pUris.push_back(item.toString());
+        }
+    }
+
+    if (obj.contains("yolo4k")) {
+        const QJsonValue value = obj.value("yolo4k");
+        if (!value.isString()) {
+            if (error) *error = QStringLiteral("yolo4k must be a string");
+            return false;
+        }
+        loaded.yolo4kUri = value.toString();
+    }
+
+    if (obj.contains("stitch4k")) {
+        const QJsonValue value = obj.value("stitch4k");
+        if (!value.isObject()) {
+            if (error) *error = QStringLiteral("stitch4k must be an object");
+            return false;
+        }
+        const QJsonObject stitch = value.toObject();
+        if (stitch.contains("top")) {
+            if (!stitch.value("top").isString()) {
+                if (error) *error = QStringLiteral("stitch4k.top must be a string");
+                return false;
+            }
+            loaded.stitchTopUri = stitch.value("top").toString();
+        }
+        if (stitch.contains("bottom")) {
+            if (!stitch.value("bottom").isString()) {
+                if (error) *error = QStringLiteral("stitch4k.bottom must be a string");
+                return false;
+            }
+            loaded.stitchBottomUri = stitch.value("bottom").toString();
+        }
+    }
+
+    *out = std::move(loaded);
+    return true;
 }
 
 bool loadTransform(const QJsonObject& obj, const char* key, StitchTransform* out, QString* error) {
@@ -220,6 +295,9 @@ int main(int argc, char* argv[]) {
     QCommandLineOption inferConfigOpt(QStringList() << "infer-config",
         "Path to nvinfer config for the YOLO panel.",
         "path", "configs/config_infer_primary_yolov10.txt");
+    QCommandLineOption sourcesConfigOpt(QStringList() << "sources-config",
+        "Path to JSON file that defines raw / YOLO / stitch RTSP sources.",
+        "path", "");
     QCommandLineOption calibrationOpt(QStringList() << "calibration",
         "Path to stitch calibration JSON.",
         "path", "configs/pair_calibration_example.json");
@@ -253,6 +331,7 @@ int main(int argc, char* argv[]) {
     parser.addOption(uri4kBottomOpt);
     parser.addOption(stageOpt);
     parser.addOption(inferConfigOpt);
+    parser.addOption(sourcesConfigOpt);
     parser.addOption(calibrationOpt);
     parser.addOption(muxWHOpt);
     parser.addOption(titleOpt);
@@ -270,13 +349,31 @@ int main(int argc, char* argv[]) {
     const bool wantYolo   = (stage == "plus_yolo" || stage == "full");
     const bool wantStitch = (stage == "full");
 
-    QStringList raw1080pUris = parser.values(uri1080pOpt);
-    if (raw1080pUris.size() > 7) {
-        qWarning().noquote() << QString(
-            "More than 7 --uri-1080p values provided (%1); truncating to 7.")
-            .arg(raw1080pUris.size());
-        raw1080pUris = raw1080pUris.mid(0, 7);
+    const QString sourcesConfigPath = resolveCliPath(parser.value(sourcesConfigOpt));
+    SourceConfig sourceConfig;
+    if (!sourcesConfigPath.isEmpty()) {
+        QString sourceErr;
+        if (!loadSourcesConfig(sourcesConfigPath, &sourceConfig, &sourceErr)) {
+            qWarning().noquote() << sourceErr;
+            return 6;
+        }
     }
+
+    auto truncateRawUris = [](QStringList uris, const char* label) {
+        if (uris.size() > 7) {
+            qWarning().noquote() << QString(
+                "More than 7 %1 values provided (%2); truncating to 7.")
+                .arg(QString::fromLatin1(label))
+                .arg(uris.size());
+            uris = uris.mid(0, 7);
+        }
+        return uris;
+    };
+
+    QStringList raw1080pUris = parser.isSet(uri1080pOpt)
+        ? parser.values(uri1080pOpt)
+        : sourceConfig.raw1080pUris;
+    raw1080pUris = truncateRawUris(std::move(raw1080pUris), "--uri-1080p");
 
     int muxW = 3840, muxH = 2160;
     {
@@ -288,7 +385,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    const QString resolvedInferCfg = resolveInferConfig(parser.value(inferConfigOpt));
+    const QString resolvedInferCfg = resolveCliPath(parser.value(inferConfigOpt));
     if (wantYolo && !QFileInfo::exists(resolvedInferCfg)) {
         qWarning().noquote() << QString(
             "YOLO panel requested but infer config not found at '%1'. "
@@ -390,8 +487,9 @@ int main(int argc, char* argv[]) {
     if (wantYolo) {
         const QString yoloUri = parser.isSet(uri4kYoloOpt)
             ? parser.value(uri4kYoloOpt)
-            : (raw1080pUris.isEmpty() ? QStringLiteral("rtsp://127.0.0.1:8554/cam4")
-                                       : raw1080pUris.first());
+            : (!sourceConfig.yolo4kUri.isEmpty() ? sourceConfig.yolo4kUri
+               : (raw1080pUris.isEmpty() ? QStringLiteral("rtsp://127.0.0.1:8554/cam4")
+                                         : raw1080pUris.first()));
 
         RtspInferSource::Options opts;
         opts.uri                    = yoloUri;
@@ -439,9 +537,15 @@ int main(int argc, char* argv[]) {
     StitchPanel stitchPanel;
     if (wantStitch) {
         const QString topUri = parser.isSet(uri4kTopOpt)
-            ? parser.value(uri4kTopOpt) : QStringLiteral("rtsp://127.0.0.1:8554/cam4");
+            ? parser.value(uri4kTopOpt)
+            : (!sourceConfig.stitchTopUri.isEmpty()
+                ? sourceConfig.stitchTopUri
+                : QStringLiteral("rtsp://127.0.0.1:8554/cam4"));
         const QString bottomUri = parser.isSet(uri4kBottomOpt)
-            ? parser.value(uri4kBottomOpt) : QStringLiteral("rtsp://127.0.0.1:8554/cam5");
+            ? parser.value(uri4kBottomOpt)
+            : (!sourceConfig.stitchBottomUri.isEmpty()
+                ? sourceConfig.stitchBottomUri
+                : QStringLiteral("rtsp://127.0.0.1:8554/cam5"));
 
         RtspSource::Options topOpts;
         topOpts.uri                    = topUri;
@@ -579,6 +683,13 @@ int main(int argc, char* argv[]) {
         .arg(yoloPanel.source ? 1 : 0)
         .arg(stitchPanel.pair ? 1 : 0)
         .arg(muxW).arg(muxH);
+    qInfo().noquote() << QString(
+        "p07 sources config=%1 raw=%2 yolo=%3 stitchTop=%4 stitchBottom=%5")
+        .arg(sourcesConfigPath.isEmpty() ? QStringLiteral("<none>") : sourcesConfigPath)
+        .arg(raw1080pUris.join(","))
+        .arg(yoloPanel.uri.isEmpty() ? QStringLiteral("<none>") : yoloPanel.uri)
+        .arg(stitchPanel.topUri.isEmpty() ? QStringLiteral("<none>") : stitchPanel.topUri)
+        .arg(stitchPanel.bottomUri.isEmpty() ? QStringLiteral("<none>") : stitchPanel.bottomUri);
 
     const qint64 startMs = QDateTime::currentMSecsSinceEpoch();
 

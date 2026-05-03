@@ -100,8 +100,14 @@ Dependency surface is the union of 04/05/06:
 # Stage 3: + 2 × 4K stitch panel (full pressure, default).
 ./scripts/run_in_container.sh --stage full --quit-after-seconds 30
 
-# Override URIs (default duplicates the existing local lab feeds).
+# Use an explicit sources roster instead of the checked-in default.
 ./scripts/run_in_container.sh \
+  --sources-config configs/sources.default.json \
+  --stage full --quit-after-seconds 30
+
+# Override individual sources; CLI wins over sources-config.
+./scripts/run_in_container.sh \
+  --sources-config configs/sources.default.json \
   --uri-1080p rtsp://127.0.0.1:8554/cam0 \
   --uri-1080p rtsp://127.0.0.1:8554/cam1 \
   ...                                         # up to 7 --uri-1080p flags
@@ -109,6 +115,14 @@ Dependency surface is the union of 04/05/06:
   --uri-4k-stitch-top rtsp://127.0.0.1:8554/cam4 \
   --uri-4k-stitch-bottom rtsp://127.0.0.1:8554/cam5
 ```
+
+By default, `scripts/run_in_container.sh` passes
+`--sources-config configs/sources.default.json` when no source-related flags
+are provided. Source precedence is:
+
+1. explicit `--uri-*` flags
+2. `--sources-config` JSON values
+3. built-in application fallbacks
 
 Expected runtime behavior:
 
@@ -163,10 +177,11 @@ DEGRADED / RECOVERED events.
 
 All measurements taken on `RTX 5090 / driver 580.126.09 / DeepStream 9.0`
 against the local mediamtx lab (`cam0..cam3` 1920×1080@15fps, `cam4..cam5`
-3840×2160@15fps). The 1080p URIs fan out across 7 ingest pipelines; the
-production shell shows `r1..r7` as visible raw previews and places the YOLO
-panel on the bottom-left slot. The YOLO panel runs on `cam4` and the stitch
-pair on `cam4`+`cam5`.
+3840×2160@15fps). The default source roster now lives in
+`configs/sources.default.json`; its 1080p entries fan out across 7 ingest
+pipelines, the production shell shows `r1..r7` as visible raw previews, and
+YOLO stays on the bottom-left slot. The YOLO panel runs on `cam4` and the
+stitch pair on `cam4`+`cam5` unless overridden.
 
 ### Convergence — staged ramp
 

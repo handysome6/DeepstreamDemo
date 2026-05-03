@@ -12,22 +12,7 @@ if [[ ! -x "$BINARY" ]]; then
     exit 1
 fi
 
-# Default URI roster: the existing local mediamtx lab from 04/06 — cam0..cam5.
-# 07 duplicates these onto 7 1080p slots when the user does not override.
-# The 4K slots default to cam4/cam5 which 06 uses for its 4K stitch
-# validation. Override any of these with the explicit flags below.
-DEFAULT_1080P=(
-    "rtsp://127.0.0.1:8554/cam0"
-    "rtsp://127.0.0.1:8554/cam1"
-    "rtsp://127.0.0.1:8554/cam2"
-    "rtsp://127.0.0.1:8554/cam3"
-    "rtsp://127.0.0.1:8554/cam0"
-    "rtsp://127.0.0.1:8554/cam1"
-    "rtsp://127.0.0.1:8554/cam2"
-)
-DEFAULT_4K_YOLO="rtsp://127.0.0.1:8554/cam4"
-DEFAULT_4K_TOP="rtsp://127.0.0.1:8554/cam4"
-DEFAULT_4K_BOTTOM="rtsp://127.0.0.1:8554/cam5"
+DEFAULT_SOURCES_CONFIG="configs/sources.default.json"
 
 # YOLO engine relocation, same trick as 05: the custom YOLO parser writes
 # the engine to <CWD>/model_b<N>_gpu<g>_fp<bits>.engine ignoring
@@ -52,31 +37,19 @@ fi
 QT_GL_INT=xcb_glx
 [[ "${ALLOW_EGL:-0}" == "1" ]] && QT_GL_INT=xcb_egl
 
-# If the caller provided no explicit 1080p / 4K-yolo / 4K-stitch slots, fill
-# in the defaults. This mirrors how 04 and 06 handle missing URIs.
+# If the caller provided no explicit source flags or sources config, fall back
+# to the checked-in default roster JSON.
 args=("$@")
-has_1080p=0; has_yolo=0; has_top=0; has_bottom=0
+has_source_flag=0
+has_sources_config=0
 for arg in "$@"; do
     case "$arg" in
-        --uri-1080p) has_1080p=1 ;;
-        --uri-4k-yolo) has_yolo=1 ;;
-        --uri-4k-stitch-top) has_top=1 ;;
-        --uri-4k-stitch-bottom) has_bottom=1 ;;
+        --uri-1080p|--uri-4k-yolo|--uri-4k-stitch-top|--uri-4k-stitch-bottom) has_source_flag=1 ;;
+        --sources-config) has_sources_config=1 ;;
     esac
 done
-if [[ $has_1080p -eq 0 ]]; then
-    for uri in "${DEFAULT_1080P[@]}"; do
-        args=(--uri-1080p "$uri" "${args[@]}")
-    done
-fi
-if [[ $has_yolo -eq 0 ]]; then
-    args=(--uri-4k-yolo "$DEFAULT_4K_YOLO" "${args[@]}")
-fi
-if [[ $has_top -eq 0 ]]; then
-    args=(--uri-4k-stitch-top "$DEFAULT_4K_TOP" "${args[@]}")
-fi
-if [[ $has_bottom -eq 0 ]]; then
-    args=(--uri-4k-stitch-bottom "$DEFAULT_4K_BOTTOM" "${args[@]}")
+if [[ $has_source_flag -eq 0 && $has_sources_config -eq 0 ]]; then
+    args=(--sources-config "$DEFAULT_SOURCES_CONFIG" "${args[@]}")
 fi
 
 CONTAINER_NAME="${COMPONENT_CONTAINER_NAME:-p07-full-pressure-$(date +%Y%m%d-%H%M%S)-$$}"
