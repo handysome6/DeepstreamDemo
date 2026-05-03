@@ -12,11 +12,10 @@ if [[ ! -x "$BINARY" ]]; then
     exit 1
 fi
 
-# Default URI roster: the existing local mediamtx lab from 04/06 — cam0..cam5
-# plus p02cam. 07 duplicates these onto 8 1080p slots when the user does not
-# override, mirroring 04's pattern. The 4K slots default to cam4/cam5 which
-# 06 uses for its 4K stitch validation. Override any of these with the
-# explicit flags below.
+# Default URI roster: the existing local mediamtx lab from 04/06 — cam0..cam5.
+# 07 duplicates these onto 7 1080p slots when the user does not override.
+# The 4K slots default to cam4/cam5 which 06 uses for its 4K stitch
+# validation. Override any of these with the explicit flags below.
 DEFAULT_1080P=(
     "rtsp://127.0.0.1:8554/cam0"
     "rtsp://127.0.0.1:8554/cam1"
@@ -25,7 +24,6 @@ DEFAULT_1080P=(
     "rtsp://127.0.0.1:8554/cam0"
     "rtsp://127.0.0.1:8554/cam1"
     "rtsp://127.0.0.1:8554/cam2"
-    "rtsp://127.0.0.1:8554/cam3"
 )
 DEFAULT_4K_YOLO="rtsp://127.0.0.1:8554/cam4"
 DEFAULT_4K_TOP="rtsp://127.0.0.1:8554/cam4"

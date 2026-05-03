@@ -3,7 +3,7 @@
 // Single Qt application that runs three independent subsystems concurrently
 // against the local RTSP lab:
 //
-//   * 8 × 1080p raw widgets (RtspSource → VideoGLWidget), the 04 path
+//   * 7 × 1080p raw widgets (RtspSource → VideoGLWidget), the 04 path
 //   * 1 × 4K YOLO widget    (RtspInferSource → VideoGLWidget), the 05 path
 //                           with mux output bumped to 3840x2160 so the
 //                           displayed frame is full-res; nvinfer's
@@ -202,12 +202,12 @@ int main(int argc, char* argv[]) {
 
     QCommandLineParser parser;
     parser.setApplicationDescription(
-        "P0.7 — full-pressure integration of 04/05/06: 8x 1080p raw + 1x 4K YOLO "
+        "P0.7 — full-pressure integration of 04/05/06: 7x 1080p raw + 1x 4K YOLO "
         "+ 2x 4K stitch in one Qt application.");
     parser.addHelpOption();
 
     QCommandLineOption uri1080pOpt(QStringList() << "uri-1080p",
-        "1080p RTSP URI for a raw widget. Repeat per widget (up to 8).", "uri");
+        "1080p RTSP URI for a raw widget. Repeat per widget (up to 7).", "uri");
     QCommandLineOption uri4kYoloOpt(QStringList() << "uri-4k-yolo",
         "4K RTSP URI for the YOLO panel.", "uri");
     QCommandLineOption uri4kTopOpt(QStringList() << "uri-4k-stitch-top",
@@ -271,11 +271,11 @@ int main(int argc, char* argv[]) {
     const bool wantStitch = (stage == "full");
 
     QStringList raw1080pUris = parser.values(uri1080pOpt);
-    if (raw1080pUris.size() > 8) {
+    if (raw1080pUris.size() > 7) {
         qWarning().noquote() << QString(
-            "More than 8 --uri-1080p values provided (%1); truncating to 8.")
+            "More than 7 --uri-1080p values provided (%1); truncating to 7.")
             .arg(raw1080pUris.size());
-        raw1080pUris = raw1080pUris.mid(0, 8);
+        raw1080pUris = raw1080pUris.mid(0, 7);
     }
 
     int muxW = 3840, muxH = 2160;

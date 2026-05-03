@@ -11,14 +11,14 @@
 
 Run, in **one Qt application on one box**, the production-shape mix:
 
-- **8 × 1080p RTSP** → raw widget (the P0.4 path)
+- **7 × 1080p RTSP** → raw widget (the P0.4 path)
 - **1 × 4K RTSP**   → YOLOv10s with full-res display + nvinfer-internal
                        downsample to network input (the P0.5 path, mux output
                        bumped to 3840×2160)
 - **2 × 4K RTSP**   → GPU stitch top-bottom → one widget (the P0.6 path
                        *without* the restream branch)
 
-10 widgets in one window, 11 RTSP ingests, three independent subsystems
+9 widgets in one window, 10 RTSP ingests, three independent subsystems
 sharing the same dGPU.
 
 ## Why this matters
@@ -54,9 +54,7 @@ All rendering lives inside one top-level `QWidget` driven by a single
 stack, one large center stitch panel, and a 4-slot right stack. Under
 `--stage full`, the left stack is `r1..r3` plus bottom-left `y1`, the center
 is `s1`, and the right stack is `r4..r7`; borders stay flush to the window
-edge with zero layout spacing and 1 px blue outlines. The 8th raw ingest
-pipeline still runs so the original full-pressure mix remains intact, even
-though this production-style shell exposes only 7 raw preview slots.
+edge with zero layout spacing and 1 px blue outlines.
 
 **GPU-only claim.** Every widget consumes `NvBufSurface` frames in
 `NVBUF_MEM_CUDA_DEVICE` memory and uploads to its GL texture with
@@ -93,7 +91,7 @@ Dependency surface is the union of 04/05/06:
 # Stage the YOLOv10s assets once (same source as 05).
 ./scripts/fetch_models.sh
 
-# Stage 1: 8 × 1080p raw only — paint pressure floor.
+# Stage 1: 7 × 1080p raw only — paint pressure floor.
 ./scripts/run_in_container.sh --stage 1080p_only --quit-after-seconds 30
 
 # Stage 2: + 1 × 4K YOLO panel.
@@ -106,7 +104,7 @@ Dependency surface is the union of 04/05/06:
 ./scripts/run_in_container.sh \
   --uri-1080p rtsp://127.0.0.1:8554/cam0 \
   --uri-1080p rtsp://127.0.0.1:8554/cam1 \
-  ...                                         # up to 8 --uri-1080p flags
+  ...                                         # up to 7 --uri-1080p flags
   --uri-4k-yolo rtsp://127.0.0.1:8554/cam4 \
   --uri-4k-stitch-top rtsp://127.0.0.1:8554/cam4 \
   --uri-4k-stitch-bottom rtsp://127.0.0.1:8554/cam5
@@ -119,8 +117,6 @@ Expected runtime behavior:
   `y1` on the left, `s1` in the center, and `r4..r7` on the right.
 - any panel omitted by stage selection falls back to a black placeholder with
   a 1 px blue border so the shell stays gap-free.
-- the 8th raw ingest continues headless to preserve the original
-  `8 × 1080p + 1 × 4K YOLO + 2 × 4K stitch` pressure mix.
 - each panel's overlay reads `rN [raw ] LIVE age=…`, `y1 [YOLO] LIVE age=…`
   or `s1 [STCH] a=LIVE b=LIVE delta=…ms stitched=N OK`.
 - once a second stdout prints `p07 status uptime=… stage=… raw=L/L
@@ -141,7 +137,7 @@ DEGRADED / RECOVERED events.
 
 - [x] Builds clean in the component container with `CMAKE_CUDA_ARCHITECTURES
       120-real` taking effect.
-- [x] Stage 1 (`--stage 1080p_only`) brings up 8 raw widgets, all `LIVE`
+- [x] Stage 1 (`--stage 1080p_only`) brings up 7 raw widgets, all `LIVE`
       within ~5 s, frame counters monotonic (`logs/stage1-smoke.log`).
 - [x] Stage 2 (`--stage plus_yolo`) brings up stage 1 + the 4K YOLO panel
       with visible bounding boxes from `nvdsosd`
@@ -167,17 +163,16 @@ DEGRADED / RECOVERED events.
 
 All measurements taken on `RTX 5090 / driver 580.126.09 / DeepStream 9.0`
 against the local mediamtx lab (`cam0..cam3` 1920×1080@15fps, `cam4..cam5`
-3840×2160@15fps). The 1080p URIs still fan out across 8 ingest pipelines;
-the production shell shows `r1..r7` as visible raw previews, places the YOLO
-panel on the bottom-left slot, and keeps the 8th raw pipeline active without
-a visible slot. The YOLO panel runs on `cam4` and the stitch pair on `cam4`+
-`cam5`.
+3840×2160@15fps). The 1080p URIs fan out across 7 ingest pipelines; the
+production shell shows `r1..r7` as visible raw previews and places the YOLO
+panel on the bottom-left slot. The YOLO panel runs on `cam4` and the stitch
+pair on `cam4`+`cam5`.
 
 ### Convergence — staged ramp
 
 | stage | mix                                | time-to-all-LIVE | log |
 |-------|------------------------------------|------------------|-----|
-| 1     | 8 × 1080p raw                      | ≤ 5 s            | `logs/stage1-smoke.log` |
+| 1     | 7 × 1080p raw                      | ≤ 5 s            | `logs/stage1-smoke.log` |
 | 2     | stage 1 + 1 × 4K YOLO              | ≤ 10 s           | `logs/stage2-smoke.log` |
 | 3     | stage 2 + 2 × 4K stitch (top+bot)  | ≤ 10 s           | `logs/stage3-smoke.log` |
 
@@ -185,7 +180,7 @@ a visible slot. The YOLO panel runs on `cam4` and the stitch pair on `cam4`+
 
 | widget class | source            | render rate | ingest-to-paint avg | ingest-to-paint max |
 |--------------|-------------------|-------------|---------------------|---------------------|
-| 8 × raw      | `cam0..cam3` (×2) | 17–18 fps   | 3.5–7.8 ms          | 38–78 ms            |
+| 7 × raw      | `cam0..cam3` (+ repeats) | 17–18 fps   | 3.5–7.8 ms          | 38–78 ms            |
 | 1 × YOLO     | `cam4` 4K         | 17–18 fps   | 6.4 ms (`tex=3840×2160`) | 59 ms          |
 | 1 × stitch   | `cam4`+`cam5` 4K  | 17–18 fps   | 6.6–7.2 ms (stitch-to-paint, `tex=3840×4288`) | 70 ms |
 
@@ -204,7 +199,7 @@ Command: `DURATION=5m ./scripts/soak.sh --stage full`.
 | process crashes                                   | 0 |
 | pipeline errors                                   | 0 |
 | stall transitions during steady state             | 0 |
-| LIVE / STALL / DEGRADED tracking                  | `raw=8/8 yolo=1/1 stitch=1/1` for the entire 5 min |
+| LIVE / STALL / DEGRADED tracking                  | `raw=7/7 yolo=1/1 stitch=1/1` for the entire 5 min |
 | per-raw frame count at uptime 4:55                | ~4380–4421 (≈15 fps × 5 min) |
 | YOLO frame count at uptime 4:55                   | 4414 |
 | stitched frame count at uptime 4:55               | 4235 |
@@ -220,7 +215,7 @@ Command: `DURATION=5m ./scripts/soak.sh --stage full`.
 | post-exit                  | 306 MiB |
 
 No monotonic growth and a clean ~9 MiB residual over baseline after exit.
-2.4 GiB is the headline integration cost of 11 RTSP ingests + the YOLO
+2.4 GiB is the headline integration cost of 10 RTSP ingests + the YOLO
 engine + the StitchCuda output buffer — all on a 32 GiB RTX 5090, well
 inside the budget.
 
@@ -233,14 +228,13 @@ runs throughout.
 #### 1080p (`logs/isolation-cam2-1080p.log`)
 
 Stopped `deepstreampoc-rtsp-pub-2` (publishes `cam2`). Runtime panel-to-
-URI map for this run was `r2,r6 → cam2` (the `--uri-1080p` defaults are
-prepended to the args list in run_in_container.sh, so the parser order
-is reversed; `r1,r5 → cam3`, `r3,r7 → cam1`, `r4,r8 → cam0`).
+URI map for this run was `r2,r6 → cam2`; the other visible raw slots stayed
+mapped to their configured sources.
 
 Observed:
 - `r2 STALLED age=2196ms (rtsp://127.0.0.1:8554/cam2)`
 - `r6 STALLED age=2196ms (rtsp://127.0.0.1:8554/cam2)`
-- `r1 r3 r4 r5 r7 r8 y1 s1` all stayed `LIVE` with `rc=0 st=0`
+- `r1 r3 r4 r5 r7 y1 s1` all stayed `LIVE` with `rc=0 st=0`
 - After recreate: `r6 LIVE`, then `r2 LIVE`, both with `rc=1 st=1`
 
 #### Stitch bottom (`logs/isolation-cam5-stitch.log`)
@@ -248,7 +242,7 @@ Observed:
 Stopped `deepstreampoc-rtsp-pub-5` (publishes `cam5`, used by stitch
 bottom only in this stage). Observed:
 - `s1 pair DEGRADED: source stale top=LIVE bottom=STALL`
-- `raw=8/8 yolo=1/1 stitch=0/1` throughout the outage
+- `raw=7/7 yolo=1/1 stitch=0/1` throughout the outage
 - `delta=3ms` held (confirming the `top` half was still flowing)
 - After recreate: `stream LIVE — frame just arrived (... reconnects=1)`,
   `s1 pair RECOVERED`, stitched count resumed climbing
@@ -260,8 +254,8 @@ Reassigned the YOLO panel to `cam5` (`--uri-4k-yolo
 rtsp://127.0.0.1:8554/cam5`) under `--stage plus_yolo` so cam5 is the
 YOLO source only. Stopped `deepstreampoc-rtsp-pub-5`. Observed:
 - `y1 STALLED age=2130ms (rtsp://127.0.0.1:8554/cam5)`
-- `raw=8/8 yolo=0/1 stitch=0/0` throughout the outage
-- All 8 raw widget frame counters kept climbing
+- `raw=7/7 yolo=0/1 stitch=0/0` throughout the outage
+- All 7 raw widget frame counters kept climbing
 - After recreate: `y1 LIVE` with `rc=1 st=1`, frames climbing to 361 over
   the next 18 s.
 
@@ -273,10 +267,9 @@ restart without any application-level intervention.
 ## Known gotchas
 
 - **The local RTSP lab is external to the repo.** P0.7's defaults duplicate
-  the existing `cam0..cam5` + `p02cam` publishers across the 8 raw slots, the
-  same way 04 does. Distinct cameras would stress nvdec harder; the recorded
-  measurements will note "shared publishers" so the numbers are not over-
-  claimed.
+  the existing `cam0..cam5` publishers across the 7 raw slots. Distinct
+  cameras would stress nvdec harder; the recorded measurements will note
+  "shared publishers" so the numbers are not over-claimed.
 - **YOLO mux at 4K is not free.** `nvdsosd` draws boxes on the 3840×2160
   canvas every frame, which is more GPU work than 05 measured (1080p mux).
   This cost is part of what P0.7 is measuring, not avoiding. To compare
